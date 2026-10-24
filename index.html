@@ -1,0 +1,678 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="description" content="Larna Aura Map: изчисляване и тълкуване на енергийна карта от дата, час и град на раждане.">
+<title>Larna Aura Map</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Unbounded:wght@500;700;800&family=Manrope:wght@400;500;600;700;800&family=IBM+Plex+Mono:wght@400;500;600&display=swap">
+<script src="https://cdn.jsdelivr.net/npm/astronomy-engine@2.1.19/astronomy.browser.min.js"></script>
+<style>
+html{-webkit-text-size-adjust:100%}body{margin:0}img{max-width:100%}[hidden]{display:none!important}
+/* Layout: цветна лента-изгрев с името и табовете; под нея работна маса — данни, бодиграф с цветни центрове, тълкуване */
+:root{
+  --bg:#FFF6EE; --surface:#FFFFFF; --sunk:#FFEDE0; --line:#F0D6C4;
+  --fg:#2A1B3D; --muted:#6E5A7E; --accent:#F0386B; --accent-2:#FF9F1C; --accent-3:#0FA3A3; --accent-soft:#FFE0E8;
+  --pers:#2A1B3D; --des:#E63946; --both:#7B4BFF; --ok:#0FA3A3;
+  --hero-a:#F0386B; --hero-b:#FF8A3D; --hero-c:#FFC93C; --hero-fg:#2A1B3D;
+  --c-head:#FFC93C; --c-ajna:#2EC4B6; --c-throat:#FF8C42; --c-g:#FFD23F; --c-heart:#EF476F;
+  --c-spleen:#8E7DFF; --c-sacral:#FF5E5B; --c-solar:#F4A259; --c-root:#C8553D;
+  --center-off:#FFFFFF;
+  --f-display:"Unbounded","Arial Black",system-ui,sans-serif;
+  --f-body:"Manrope",system-ui,-apple-system,"Segoe UI",sans-serif;
+  --f-mono:"IBM Plex Mono",ui-monospace,Menlo,Consolas,monospace;
+}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){
+  --bg:#170F22; --surface:#221833; --sunk:#1B1229; --line:#3B2B52;
+  --fg:#FFF1E6; --muted:#C4B2D6; --accent:#FF6B93; --accent-2:#FFB347; --accent-3:#3DD6C8; --accent-soft:#3D2340;
+  --pers:#FFF1E6; --des:#FF6B6B; --both:#A98BFF; --ok:#3DD6C8; --center-off:#221833; color-scheme:dark}}
+:root[data-theme="dark"]{
+  --bg:#170F22; --surface:#221833; --sunk:#1B1229; --line:#3B2B52;
+  --fg:#FFF1E6; --muted:#C4B2D6; --accent:#FF6B93; --accent-2:#FFB347; --accent-3:#3DD6C8; --accent-soft:#3D2340;
+  --pers:#FFF1E6; --des:#FF6B6B; --both:#A98BFF; --ok:#3DD6C8; --center-off:#221833; color-scheme:dark}
+*{box-sizing:border-box}
+body{background:var(--bg);color:var(--fg);font-family:var(--f-body);font-size:15px;line-height:1.55;
+  padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));padding-block:16px 48px}
+.wrap{max-width:1180px;margin:0 auto;display:grid;gap:20px}
+h1,h2,h3{font-family:var(--f-display);font-weight:700;text-wrap:balance;margin:0;line-height:1.2;letter-spacing:-.01em;overflow-wrap:break-word}
+h1{font-size:clamp(1.9rem,5vw,3rem);font-weight:800} h2{font-size:1.15rem} h3{font-size:.92rem}
+p{margin:0}
+.mono{font-family:var(--f-mono);font-variant-numeric:tabular-nums}
+.muted{color:var(--muted)}
+.eyebrow{font-size:.7rem;letter-spacing:.1em;text-transform:uppercase;color:var(--muted);font-weight:700}
+header.top{position:relative;overflow:hidden;border-radius:24px;padding:26px 24px 18px;display:grid;gap:18px;color:var(--hero-fg);
+  background:radial-gradient(circle at 88% 20%,var(--hero-c) 0 14%,transparent 40%),linear-gradient(120deg,var(--hero-a),var(--hero-b) 55%,var(--hero-c))}
+header.top .rings{position:absolute;right:-40px;top:-50px;width:260px;height:260px;opacity:.35;pointer-events:none}
+.brand{display:flex;gap:16px;align-items:center;position:relative}
+.brand svg{flex:none}
+.brand p{font-size:.95rem;font-weight:600;opacity:.85;max-width:52ch}
+.brand h1 span{font-weight:500}
+nav.tabs{display:flex;flex-wrap:wrap;gap:6px;position:relative}
+nav.tabs button{font:inherit;font-size:.86rem;font-weight:700;white-space:nowrap;border:0;background:rgba(255,255,255,.35);color:var(--hero-fg);padding:8px 14px;border-radius:999px;cursor:pointer}
+nav.tabs button:hover{background:rgba(255,255,255,.6)}
+nav.tabs button[aria-selected="true"]{background:var(--hero-fg);color:#FFF6EE}
+button,select,input{font:inherit}
+:focus-visible{outline:3px solid var(--accent-3);outline-offset:2px}
+.btn{border:1.5px solid var(--line);background:var(--surface);color:var(--fg);padding:8px 16px;border-radius:999px;cursor:pointer;font-weight:700;font-size:.86rem}
+.btn:hover{border-color:var(--accent)}
+.btn.primary{background:var(--accent);border-color:var(--accent);color:#FFFFFF}
+.btn.primary:hover{filter:brightness(1.08)}
+.btn.small{padding:4px 12px;font-size:.8rem}
+.btn.danger{color:var(--des);border-color:var(--des)}
+label.f{display:grid;gap:4px;font-size:.78rem;color:var(--muted);font-weight:700;min-width:0}
+input,select{background:var(--surface);color:var(--fg);border:1.5px solid var(--line);border-radius:12px;padding:8px 12px;width:100%;min-width:0}
+input:focus,select:focus{border-color:var(--accent-3)}
+.form{display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:12px;align-items:end}
+.form-actions{grid-column:1/-1}
+.form.fb{grid-template-columns:repeat(5,minmax(0,1fr))}
+.form.fs{grid-template-columns:repeat(3,minmax(0,1fr))}
+@media (max-width:900px){.form.fb,.form.fs{grid-template-columns:repeat(2,minmax(0,1fr))}.form.fb>label:first-child{grid-column:1/-1}}
+@media (max-width:480px){.form.fb,.form.fs{grid-template-columns:minmax(0,1fr)}}
+.panel-head{display:flex;flex-wrap:wrap;justify-content:space-between;align-items:flex-end;gap:12px}
+.panel{background:var(--surface);border:1px solid var(--line);border-radius:20px;padding:20px;display:grid;gap:14px;min-width:0}
+.panel.glow{background:radial-gradient(circle at 50% 42%,color-mix(in srgb,var(--c-g) 22%,transparent),transparent 62%),var(--surface)}
+.sunk{background:var(--sunk);border-radius:14px;padding:14px;display:grid;gap:8px;min-width:0}
+.row{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+.grid-3{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1.05fr) minmax(0,1fr);gap:20px;align-items:start}
+.grid-2{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:20px;align-items:start}
+@media (max-width:900px){.grid-3,.grid-2{grid-template-columns:minmax(0,1fr)}.grid-3>.panel:nth-child(2){order:-1}}
+.keys{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px}
+.keys>div:nth-child(7){grid-column:span 2}
+.keys.k3{grid-template-columns:repeat(3,minmax(0,1fr))}
+.keys.k3>div:nth-child(7){grid-column:auto}
+@media (max-width:900px){.keys{grid-template-columns:repeat(2,minmax(0,1fr))}.keys.k3{grid-template-columns:minmax(0,1fr)}}
+.nw{white-space:nowrap}
+.keys>div{--k:var(--accent);background:color-mix(in srgb,var(--k) 20%,var(--surface));border:1px solid color-mix(in srgb,var(--k) 45%,var(--surface));border-radius:16px;padding:14px 16px;display:flex;flex-direction:column;justify-content:flex-start;gap:6px;min-width:0}
+.keys>div:nth-child(7n+1){--k:var(--c-sacral)} .keys>div:nth-child(7n+2){--k:var(--c-throat)} .keys>div:nth-child(7n+3){--k:var(--c-head)}
+.keys>div:nth-child(7n+4){--k:var(--c-ajna)} .keys>div:nth-child(7n+5){--k:var(--c-spleen)} .keys>div:nth-child(7n+6){--k:var(--c-heart)} .keys>div:nth-child(7n+7){--k:var(--c-solar)}
+.keys .val{font-family:var(--f-body);font-size:1.05rem;font-weight:800;line-height:1.3;color:var(--fg)}
+.keys .sub{font-family:var(--f-body);font-size:.84rem;font-weight:600;line-height:1.45;color:var(--muted)}
+.keys .sub.mono{font-family:var(--f-mono);font-weight:500}
+.chip{display:inline-flex;align-items:center;gap:6px;border:1px solid var(--line);border-radius:999px;padding:2px 10px;font-size:.78rem;font-weight:600;background:var(--surface)}
+.dot{width:9px;height:9px;border-radius:50%;display:inline-block}
+table{border-collapse:collapse;width:100%;font-size:.85rem}
+th,td{text-align:left;padding:5px 6px;border-bottom:1px solid var(--line)}
+th{font-size:.72rem;letter-spacing:.06em;text-transform:uppercase;color:var(--muted);font-weight:600}
+td.d{color:var(--des)} td.p{color:var(--pers)}
+.scroll{overflow-x:auto}
+svg text{font-family:var(--f-mono)}
+.bg-svg{width:100%;max-width:380px;height:auto;margin:0 auto;display:block}
+.cnode{cursor:pointer}
+.cnode:hover path,.cnode:hover rect,.cnode:hover polygon{stroke-width:2.4}
+.chline{cursor:pointer}
+.clabel{font-family:var(--f-body)}
+.legend{display:flex;flex-wrap:wrap;gap:12px;font-size:.78rem;color:var(--muted);justify-content:center}
+.legend span{display:inline-flex;align-items:center;gap:6px}
+.legend i{width:18px;height:5px;border-radius:3px;display:inline-block}
+.list{display:grid;gap:10px}
+.card{border:1px solid var(--line);border-radius:16px;padding:12px 14px;display:grid;gap:6px;background:var(--surface);min-width:0}
+.card h3{font-size:1rem}
+.tag{font-size:.72rem;font-weight:800;letter-spacing:.04em;padding:2px 10px;border-radius:999px;background:var(--accent-soft);color:var(--accent)}
+.kv{display:grid;grid-template-columns:auto 1fr;gap:4px 12px;font-size:.88rem}
+.kv dt{color:var(--muted)} .kv dd{margin:0}
+.report{display:grid;gap:18px;max-width:72ch}
+.report section{display:grid;gap:8px}
+.report ul{margin:0;padding-left:20px;display:grid;gap:4px}
+.note{font-size:.82rem;color:var(--muted);border-left:3px solid var(--accent);padding-left:10px}
+.warn{color:var(--des)}
+.cards-2{display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:12px}
+.pill-ok{color:var(--ok);font-weight:700}
+[role="tabpanel"]{display:grid;gap:20px}
+.arrow{font-family:var(--f-mono);font-weight:700;color:var(--accent-3)}
+@media (prefers-reduced-motion:no-preference){.chline,.cnode *{transition:stroke-width .15s}}
+</style>
+</head>
+<body>
+
+<div class="wrap">
+  <header class="top">
+    <svg class="rings" viewBox="0 0 200 200" aria-hidden="true"><g fill="none" stroke="var(--hero-fg)" stroke-width="1.2"><circle cx="100" cy="100" r="96"/><circle cx="100" cy="100" r="74"/><circle cx="100" cy="100" r="52"/><circle cx="100" cy="100" r="30"/></g></svg>
+    <div class="brand">
+      <svg width="58" height="58" viewBox="0 0 44 44" aria-hidden="true"><circle cx="22" cy="22" r="21" fill="var(--hero-fg)"/><polygon points="22,7 33,25 11,25" fill="var(--c-head)"/><polygon points="22,37 11,19 33,19" fill="var(--c-ajna)" opacity=".85"/><circle cx="22" cy="22" r="3.2" fill="var(--c-heart)"/></svg>
+      <div><h1>Larna <span>Aura Map</span></h1><p>Вашата енергийна карта: изчисляване и тълкуване по системата Енергиен дизайн</p></div>
+    </div>
+    <nav class="tabs" role="tablist" aria-label="Модули">
+      <button role="tab" data-tab="karta" aria-selected="true">Карта</button>
+      <button role="tab" data-tab="analiz">Личен анализ</button>
+      <button role="tab" data-tab="tranziti">Транзити</button>
+      <button role="tab" data-tab="sinastria">Синастрия</button>
+      <button role="tab" data-tab="kryst">Кръст и стрелки</button>
+      <button role="tab" data-tab="spravochnik">Справочник</button>
+      <button role="tab" data-tab="kalkulator">Калкулатор</button>
+    </nav>
+  </header>
+
+  <div id="libErr" class="panel warn" hidden>Астрономическата библиотека не се зареди. Проверете интернет връзката и презаредете страницата. Без нея картата не може да се изчисли.</div>
+
+  <!-- ============ КАРТА ============ -->
+  <section role="tabpanel" id="tab-karta">
+    <div class="panel">
+      <div class="panel-head">
+        <h2>Данни за раждане</h2>
+        <div class="row" style="align-items:flex-end">
+          <label class="f" style="min-width:180px">Запазени карти
+            <select id="savedSel"><option value="">— изберете —</option></select></label>
+          <button class="btn small" id="btnDelete" type="button">Изтрий</button>
+        </div>
+      </div>
+      <form class="form fb" id="birthForm">
+        <label class="f">Име<input id="bName" required></label>
+        <label class="f">Дата<input id="bDate" type="date" required></label>
+        <label class="f">Час (местен)<input id="bTime" type="time" required></label>
+        <label class="f">Град на раждане<input id="bPlace" list="cityList" placeholder="Започнете да пишете" autocomplete="off"></label>
+        <label class="f">Часова зона<select id="bTz"></select></label>
+        <div class="row form-actions"><button class="btn primary" type="submit">Изчисли</button><button class="btn" type="button" id="btnSave">Запази</button></div>
+      </form>
+      <p class="muted" id="bCityHint" style="font-size:.82rem"></p>
+      <p class="note" id="birthNote"></p>
+      <datalist id="cityList"></datalist>
+    </div>
+
+    <div class="keys" id="keyStats"></div>
+
+    <div class="grid-3">
+      <div class="panel">
+        <div class="eyebrow">Активации</div>
+        <div class="scroll"><table id="actTable"></table></div>
+        <p class="note">Червено: Дизайн (несъзнателно, 88° слънчева дъга преди раждането). Черно: Личност (съзнателно, моментът на раждане).</p>
+      </div>
+      <div class="panel glow">
+        <svg id="bodygraph" class="bg-svg" viewBox="0 0 360 520" role="img" aria-label="Бодиграф"></svg>
+        <div class="legend"><span><i style="background:var(--pers)"></i>Личност</span><span><i style="background:var(--des)"></i>Дизайн</span><span><i style="background:var(--both)"></i>И двете</span><span><i style="background:linear-gradient(90deg,var(--c-head),var(--c-ajna),var(--c-throat),var(--c-heart),var(--c-spleen))"></i>Цветен център = дефиниран</span></div>
+      </div>
+      <div class="panel" id="inspector" aria-live="polite"></div>
+    </div>
+  </section>
+
+  <!-- ============ АНАЛИЗ ============ -->
+  <section role="tabpanel" id="tab-analiz" hidden>
+    <div class="panel">
+      <div class="row" style="justify-content:space-between">
+        <div><div class="eyebrow">Синтезиран прочит</div><h2 id="repTitle">Личен анализ</h2></div>
+        <button class="btn primary" id="btnCopy" type="button">Копирай текста</button>
+      </div>
+      <div class="report" id="report"></div>
+    </div>
+  </section>
+
+  <!-- ============ ТРАНЗИТИ ============ -->
+  <section role="tabpanel" id="tab-tranziti" hidden>
+    <div class="panel">
+      <div class="eyebrow">Транзит спрямо текущата карта</div>
+      <form class="form" id="trForm">
+        <label class="f">Дата<input id="trDate" type="date"></label>
+        <label class="f">Час<input id="trTime" type="time"></label>
+        <div class="row"><button class="btn primary" type="submit">Изчисли транзита</button><button class="btn" type="button" id="trNow">Сега</button></div>
+      </form>
+      <p class="note">Часът е в часовата зона на текущата карта. Слънцето сменя портал на около 6 дни, Луната на няколко часа, външните планети на месеци.</p>
+    </div>
+    <div class="grid-2">
+      <div class="panel"><div class="eyebrow">Позиции на планетите</div><div class="scroll"><table id="trTable"></table></div></div>
+      <div class="panel" id="trImpact"></div>
+    </div>
+  </section>
+
+  <!-- ============ СИНАСТРИЯ ============ -->
+  <section role="tabpanel" id="tab-sinastria" hidden>
+    <div class="panel">
+      <div class="eyebrow">Човек Б (Човек А е текущата карта)</div>
+      <form class="form fs" id="synForm">
+        <label class="f">От запазените<select id="synSaved"><option value="">— или въведете —</option></select></label>
+        <label class="f">Име<input id="sName"></label>
+        <label class="f">Дата<input id="sDate" type="date" required></label>
+        <label class="f">Час<input id="sTime" type="time" required></label>
+        <label class="f">Град на раждане<input id="sPlace" list="cityList" placeholder="Започнете да пишете" autocomplete="off"></label>
+        <label class="f">Часова зона<select id="sTz"></select></label>
+        <div class="row form-actions"><button class="btn primary" type="submit">Сравни</button></div>
+      </form>
+      <p class="muted" id="sCityHint" style="font-size:.82rem"></p>
+    </div>
+    <div id="synOut" class="grid-2"></div>
+  </section>
+
+  <!-- ============ КРЪСТ ============ -->
+  <section role="tabpanel" id="tab-kryst" hidden>
+    <div class="grid-2">
+      <div class="panel" id="crossOut"></div>
+      <div class="panel" id="varsOut"></div>
+    </div>
+  </section>
+
+  <!-- ============ СПРАВОЧНИК ============ -->
+  <section role="tabpanel" id="tab-spravochnik" hidden>
+    <div class="panel">
+      <div class="row" style="justify-content:space-between">
+        <div class="row" role="group" aria-label="Раздел">
+          <button class="btn small" data-ref="channels" type="button">36 канала</button>
+          <button class="btn small" data-ref="centers" type="button">9 центъра</button>
+          <button class="btn small" data-ref="gates" type="button">64 портала</button>
+          <button class="btn small" data-ref="types" type="button">Типове и авторитети</button>
+        </div>
+        <div class="row">
+          <select id="refCircuit" style="width:auto"><option value="ALL">Всички контури (36)</option></select>
+          <input id="refSearch" placeholder="Търси номер или име" style="width:200px">
+        </div>
+      </div>
+      <div id="refOut" class="cards-2"></div>
+    </div>
+  </section>
+
+  <!-- ============ КАЛКУЛАТОР ============ -->
+  <section role="tabpanel" id="tab-kalkulator" hidden>
+    <div class="panel">
+      <div class="eyebrow">Зодиакален градус към портал</div>
+      <p class="muted">Портал 41 започва на 2°00′ Водолей (302° еклиптична дължина). Портал = 5°37′30″, линия = 0°56′15″, цвят = 9′22,5″, тон = 1′33,75″, база = 18,75″.</p>
+      <form class="form" id="astroForm">
+        <label class="f">Знак<select id="aSign"></select></label>
+        <label class="f">Градуси<input id="aDeg" type="number" min="0" max="29" value="1"></label>
+        <label class="f">Минути<input id="aMin" type="number" min="0" max="59" value="15"></label>
+        <label class="f">Секунди<input id="aSec" type="number" min="0" max="59" value="0"></label>
+      </form>
+      <div id="astroOut" class="sunk"></div>
+    </div>
+  </section>
+
+  <p class="note">Larna Aura Map. Изчисленията използват тропически зодиак, истински лунен възел и библиотеката Astronomy Engine. Тълкуванията са ориентир за самонаблюдение, а не предсказание.</p>
+</div>
+
+<script>
+"use strict";
+/* ================= ДАННИ ================= */
+const MANDALA=[41,19,13,49,30,55,37,63,22,36,25,17,21,51,42,3,27,24,2,23,8,20,16,35,45,12,15,52,39,53,62,56,31,33,7,4,29,59,40,64,47,6,46,18,48,57,32,50,28,44,1,43,14,34,9,5,26,11,10,58,38,54,61,60];
+const GATE_NAMES={1:"Творчеството (Себеизразяване)",2:"Възприемчивостта (Посоката на Аза)",3:"Трудностите в началото (Подреждане)",4:"Младежкото безразсъдство (Формулиране)",5:"Изчакването (Фиксирани ритми)",6:"Конфликтът (Триене и интимност)",7:"Армията (Ролята на Аза в общността)",8:"Сплотяването (Принос)",9:"Укротяващата сила на малкото (Фокус)",10:"Стъпването (Поведението на Аза)",11:"Мирът (Идеи)",12:"Застоят (Предпазливост)",13:"Другарството с хората (Слушателят)",14:"Притежание в голяма мяра (Силови умения)",15:"Скромността (Крайности и ритъм)",16:"Ентусиазмът (Умения)",17:"Следването (Мнения)",18:"Работа върху разваленото (Корекция)",19:"Приближаването (Потребности)",20:"Съзерцанието (Тук и сега)",21:"Прегризването (Контрол)",22:"Грацията (Отвореност)",23:"Разцепването (Асимилация)",24:"Завръщането (Рационализация)",25:"Невинността (Духът на Аза)",26:"Укротяващата сила на великото (Егоистът)",27:"Храненето (Грижа)",28:"Преобладаването на великото (Играчът на риск)",29:"Бездната (Казването на „да“)",30:"Огънят (Чувствата)",31:"Влиянието (Лидерство)",32:"Продължителността (Непрекъснатост)",33:"Оттеглянето (Уединение и памет)",34:"Мощта на великото (Чиста сила)",35:"Прогресът (Промяна и опит)",36:"Помрачаването на светлината (Криза)",37:"Семейството (Приятелство)",38:"Противопоставянето (Борецът)",39:"Препятствието (Провокация)",40:"Освобождаването (Самота и труд)",41:"Намаляването (Фантазия)",42:"Увеличаването (Растеж)",43:"Пробивът (Прозрение)",44:"Срещата (Бдителност)",45:"Събирането (Събирачът)",46:"Изтласкването нагоре (Любов към тялото)",47:"Потиснатостта (Осмисляне)",48:"Кладенецът (Дълбочина)",49:"Революцията (Принципи)",50:"Котелът (Ценности)",51:"Възбуждането (Шок)",52:"Покоят (Неподвижност)",53:"Развитието (Начала)",54:"Омъжващата се девойка (Амбиция)",55:"Изобилието (Духът)",56:"Странникът (Стимулация)",57:"Нежното (Интуитивна яснота)",58:"Радостното (Жизненост)",59:"Разпръскването (Сексуалност)",60:"Ограничението (Приемане)",61:"Вътрешната истина (Мистерия)",62:"Преобладаването на малкото (Детайли)",63:"След завършването (Съмнение)",64:"Преди завършването (Объркване)"};
+
+const CENTERS={
+ HEAD:{name:"Теменен център",short:"Глава",type:"Натиск",bio:"Епифизна жлеза",defined:"Постоянен източник на вдъхновение и ментален натиск да задавате въпроси.",open:"Поемате чужди въпроси и тревоги. Умът се опитва да отговори на неща, които не са ваши.",q:"Опитвам ли се да отговоря на въпроси, които не са мои?"},
+ AJNA:{name:"Аджна",short:"Ум",type:"Осъзнатост",bio:"Хипофиза",defined:"Устойчив начин на обработка на информация. Надежден инструмент за анализ, но не е авторитет за лични решения.",open:"Гъвкаво мислене и способност да виждате много гледни точки. Капанът е да се преструвате на сигурни.",q:"Опитвам ли се да убедя другите, че съм сигурна?"},
+ THROAT:{name:"Гърлен център",short:"Гърло",type:"Изразяване и действие",bio:"Щитовидна и паращитовидна жлеза",defined:"Разпознаваем глас и устойчив начин на изразяване, който зависи от свързания център.",open:"Гласът се адаптира към събеседника. Натиск да говорите, за да привлечете внимание.",q:"Опитвам ли се да привлека внимание с говорене или действие?"},
+ G:{name:"G-център",short:"Идентичност",type:"Идентичност, посока, любов",bio:"Черен дроб и кръв",defined:"Устойчиво усещане за посока и кой сте.",open:"Идентичността се влияе от средата и хората. Мястото, в което живеете и работите, има голямо значение.",q:"Търся ли все още себе си и правилната посока?"},
+ HEART:{name:"Его център",short:"Воля",type:"Мотор (воля)",bio:"Сърце, стомах, жлъчка, тимус",defined:"Достъп до волева енергия за обещания и сделки, когато са поети коректно.",open:"Няма постоянна воля. Капанът е да доказвате стойността си с обещания.",q:"Опитвам ли се да докажа нещо на себе си или на другите?"},
+ SACRAL:{name:"Сакрален център",short:"Сакрал",type:"Мотор (жизнена сила)",bio:"Яйчници и тестиси",defined:"Устойчива работна и жизнена енергия, която се включва чрез отклик.",open:"Усилвате чуждата работна енергия и не разпознавате кога е достатъчно.",q:"Знам ли кога е достатъчно?"},
+ SPLEEN:{name:"Далачен център",short:"Далак",type:"Осъзнатост (тяло, сега)",bio:"Далак, лимфна система",defined:"Моментна интуиция за здраве и безопасност. Говори веднъж и тихо.",open:"Чувствителност към физическото състояние на другите. Капанът е да се държите за това, което вече не е добро за вас.",q:"Държа ли се за хора и ситуации, които не са добри за мен?"},
+ SOLAR:{name:"Слънчев сплит",short:"Емоции",type:"Мотор и осъзнатост",bio:"Бъбреци, панкреас, нервна система",defined:"Собствена емоционална вълна. Яснотата идва с времето, не в момента.",open:"Усилвате чуждите емоции. Капанът е да избягвате истината и конфронтацията.",q:"Избягвам ли конфронтацията, за да запазя мира?"},
+ ROOT:{name:"Коренен център",short:"Корен",type:"Мотор и натиск (адреналин)",bio:"Надбъбречни жлези",defined:"Устойчив ритъм за справяне с напрежението.",open:"Усилвате чуждия натиск и бързате да приключите, за да се освободите от него.",q:"Бързам ли, за да се отърва от натиска?"}
+};
+const MOTORS=["SACRAL","SOLAR","HEART","ROOT"];
+const CCOL={HEAD:"var(--c-head)",AJNA:"var(--c-ajna)",THROAT:"var(--c-throat)",G:"var(--c-g)",HEART:"var(--c-heart)",SPLEEN:"var(--c-spleen)",SACRAL:"var(--c-sacral)",SOLAR:"var(--c-solar)",ROOT:"var(--c-root)"};
+
+const CHANNELS=[
+ {id:"64-47",g:[64,47],c:["HEAD","AJNA"],name:"Абстракцията",circ:"Колективен (Абстрактен)",arch:"Ментална активност и яснота",mech:"Превръща минали преживявания и образи в смислени изводи.",ok:"Оставя прозрението да узрее, без да насилва ума.",sh:"Безпокойство и опит да реши живота си като задача."},
+ {id:"61-24",g:[61,24],c:["HEAD","AJNA"],name:"Осъзнатостта",circ:"Индивидуален",arch:"Мислителят",mech:"Внезапно знание след дълго въртене на мисълта.",ok:"Споделя уникални прозрения, когато има покана.",sh:"Натрапчиво циклене, когато отговорът не идва веднага."},
+ {id:"63-4",g:[63,4],c:["HEAD","AJNA"],name:"Логиката",circ:"Колективен (Логика)",arch:"Ментална лекота и съмнение",mech:"Търси пропуски в системите и формулира хипотези.",ok:"Тества процеси и модели обективно.",sh:"Насочва съмнението към себе си и близките."},
+ {id:"17-62",g:[17,62],c:["AJNA","THROAT"],name:"Приемането",circ:"Колективен (Логика)",arch:"Организационно същество",mech:"Превежда модели и концепции в детайли и факти.",ok:"Дава структурирано мнение, когато е попитан.",sh:"Налага мнения непоискано."},
+ {id:"43-23",g:[43,23],c:["AJNA","THROAT"],name:"Структурирането",circ:"Индивидуален",arch:"От гений до чудак",mech:"Превежда нестандартно вътрешно знание в думи.",ok:"Изчаква правилния момент и аудитория.",sh:"Говори в неподходящ момент и среща отхвърляне."},
+ {id:"11-56",g:[11,56],c:["AJNA","THROAT"],name:"Любопитството",circ:"Колективен (Абстрактен)",arch:"Търсачът и разказвачът",mech:"Стимулира другите с истории, метафори и идеи.",ok:"Вдъхновява с разкази без догми.",sh:"Преувеличава или търси безкрай, без да довършва."},
+ {id:"16-48",g:[16,48],c:["THROAT","SPLEEN"],name:"Таланта",circ:"Колективен (Логика)",arch:"Майсторство чрез повторение",mech:"Съчетава дълбочина (48) с ентусиазъм и техника (16).",ok:"Усъвършенства уменията с практика.",sh:"Страх от недостатъчност, който пречи да започне."},
+ {id:"20-57",g:[20,57],c:["THROAT","SPLEEN"],name:"Мозъчната вълна",circ:"Интеграционен",arch:"Проникваща осъзнатост в сега",mech:"Светкавична интуиция, изразена в момента.",ok:"Спонтанна точна реакция при нужда.",sh:"Говорене от нервност без повод."},
+ {id:"20-34",g:[20,34],c:["THROAT","SACRAL"],name:"Харизмата",circ:"Интеграционен",arch:"Заетост в настоящето",mech:"Пряка връзка от сакралния мотор към гърлото.",ok:"Действа бързо, но след отклик.",sh:"Хаотична свръхактивност."},
+ {id:"20-10",g:[20,10],c:["THROAT","G"],name:"Пробуждането",circ:"Интеграционен",arch:"Ангажираност с принципи",mech:"Изразява автентичното поведение в момента.",ok:"Себеприемане и автентично присъствие.",sh:"Морализаторстване."},
+ {id:"31-7",g:[31,7],c:["THROAT","G"],name:"Алфата",circ:"Колективен (Логика)",arch:"Лидерство",mech:"Логическо водене към бъдеща посока след признание.",ok:"Води, когато групата му е гласувала доверие.",sh:"Командва, без да е избран."},
+ {id:"8-1",g:[8,1],c:["THROAT","G"],name:"Вдъхновението",circ:"Индивидуален",arch:"Творчески пример",mech:"Привлича внимание към уникални творчески прояви.",ok:"Води с личен пример.",sh:"Подражава на модата, за да се хареса."},
+ {id:"33-13",g:[33,13],c:["THROAT","G"],name:"Блудния син",circ:"Колективен (Абстрактен)",arch:"Свидетелят",mech:"Събира чужд опит, оттегля се и предава уроците.",ok:"Дискретен слушател и мъдър разказвач.",sh:"Разкрива тайни преждевременно."},
+ {id:"45-21",g:[45,21],c:["THROAT","HEART"],name:"Парите",circ:"Племенен",arch:"Управителят",mech:"Контрол и разпределение на ресурсите на групата.",ok:"Осигурява стабилност и делегира, като информира.",sh:"Микромениджмънт."},
+ {id:"12-22",g:[12,22],c:["THROAT","SOLAR"],name:"Отвореността",circ:"Индивидуален",arch:"Социално същество",mech:"Предава емоционалния дух чрез гласа.",ok:"Изчаква настроението, преди да се изяви.",sh:"Рязкост в ниската точка на вълната."},
+ {id:"35-36",g:[35,36],c:["THROAT","SOLAR"],name:"Преходността",circ:"Колективен (Абстрактен)",arch:"Майстор на всичко",mech:"Глад за нови преживявания и емоционална дълбочина.",ok:"Влиза в опита след изчакване на вълната.",sh:"Създава кризи от скука."},
+ {id:"10-34",g:[10,34],c:["G","SACRAL"],name:"Изследването",circ:"Интеграционен",arch:"Следване на убежденията",mech:"Сакрална сила в служба на автентичното поведение.",ok:"Независимост чрез отклик.",sh:"Инат и глухота за средата."},
+ {id:"15-5",g:[15,5],c:["G","SACRAL"],name:"Ритъма",circ:"Колективен (Логика)",arch:"Да бъдеш в потока",mech:"Свързва личния ритъм с ритъма на природата.",ok:"Отличен усет за време.",sh:"Хаос, когато е насилен в чужд график."},
+ {id:"2-14",g:[2,14],c:["G","SACRAL"],name:"Пулса",circ:"Индивидуален",arch:"Пазителят на ключовете",mech:"Създава ресурси и задава посока чрез работа по отклик.",ok:"Работи по призвание и ресурсите идват.",sh:"Работа само заради заплатата."},
+ {id:"46-29",g:[46,29],c:["G","SACRAL"],name:"Откритието",circ:"Колективен (Абстрактен)",arch:"Успех там, където другите се провалят",mech:"Пълна отдаденост на опита чрез тялото.",ok:"Казва „да“ след ясен отклик.",sh:"Поема чужди ангажименти и прегаря."},
+ {id:"51-25",g:[51,25],c:["HEART","G"],name:"Инициацията",circ:"Индивидуален",arch:"Нужда да си първи",mech:"Скок в неизвестното, който калява духа.",ok:"Дава кураж при трудни преходи.",sh:"Безсмислен риск заради егото."},
+ {id:"10-57",g:[10,57],c:["G","SPLEEN"],name:"Съвършената форма",circ:"Интеграционен",arch:"Интуитивно оцеляване",mech:"Свързва интуицията с поведението.",ok:"Създава хармонична среда интуитивно.",sh:"Постоянен страх за оцеляване."},
+ {id:"57-34",g:[57,34],c:["SPLEEN","SACRAL"],name:"Силата",circ:"Интеграционен",arch:"Архетипът на силата",mech:"Сакрална сила, ръководена от инстинкта.",ok:"Точен защитен рефлекс в момента.",sh:"Доминиране над по-слабите."},
+ {id:"50-27",g:[50,27],c:["SPLEEN","SACRAL"],name:"Съхранението",circ:"Племенен",arch:"Пазителят",mech:"Грижа и спазване на ценностите на общността.",ok:"Грижи се след отклик и пази границите си.",sh:"Синдром на спасителя."},
+ {id:"59-6",g:[59,6],c:["SACRAL","SOLAR"],name:"Интимността",circ:"Племенен",arch:"Близост и създаване",mech:"Пробива бариерите и създава близост, деца или проекти.",ok:"Изчаква емоционална яснота преди обвързване.",sh:"Импулсивни връзки и драма."},
+ {id:"44-26",g:[44,26],c:["SPLEEN","HEART"],name:"Предаването",circ:"Племенен",arch:"Предприемачът",mech:"Усеща пазарната нужда и продава с минимум усилия.",ok:"Честен маркетинг.",sh:"Преувеличаване за лична изгода."},
+ {id:"37-40",g:[37,40],c:["SOLAR","HEART"],name:"Общността",circ:"Племенен",arch:"Сделката",mech:"Баланс между труд (40) и лоялност (37).",ok:"Ясни споразумения след емоционална яснота.",sh:"Неясни очаквания и липса на признание."},
+ {id:"42-53",g:[42,53],c:["SACRAL","ROOT"],name:"Съзряването",circ:"Колективен (Абстрактен)",arch:"Развитие в цикли",mech:"Всеки процес има начало, среда и край.",ok:"Влиза в цикли чрез отклик и ги довършва.",sh:"Започва много неща и ги изоставя."},
+ {id:"3-60",g:[3,60],c:["SACRAL","ROOT"],name:"Мутацията",circ:"Индивидуален",arch:"Пулсираща промяна",mech:"Носи иновация на импулси, със спокойни периоди между тях.",ok:"Приема застоя като подготовка за промяна.",sh:"Меланхолия и нетърпение, когато промяната закъснява."},
+ {id:"9-52",g:[9,52],c:["SACRAL","ROOT"],name:"Концентрацията",circ:"Колективен (Логика)",arch:"Решителност",mech:"Устойчив фокус върху детайла за дълго време.",ok:"Довежда задачите докрай със спокойна съсредоточеност.",sh:"Безпокойство, когато няма върху какво да се фокусира."},
+ {id:"18-58",g:[18,58],c:["SPLEEN","ROOT"],name:"Оценяването",circ:"Колективен (Логика)",arch:"Стремеж към подобрение",mech:"Вижда какво може да се подобри и има енергия да го коригира.",ok:"Конструктивна критика, когато е поискана.",sh:"Хронично недоволство и критика към всичко."},
+ {id:"28-38",g:[28,38],c:["SPLEEN","ROOT"],name:"Борбата",circ:"Индивидуален",arch:"Упоритост",mech:"Търси смисъл и се бори за това, което има стойност.",ok:"Упорства там, където има истински смисъл.",sh:"Бори се за всичко, включително за безсмислени неща."},
+ {id:"32-54",g:[32,54],c:["SPLEEN","ROOT"],name:"Трансформацията",circ:"Племенен",arch:"Амбиция и издигане",mech:"Амбиция, ръководена от усет кое ще оцелее във времето.",ok:"Издига се чрез признание и лоялност.",sh:"Амбиция на всяка цена."},
+ {id:"19-49",g:[19,49],c:["ROOT","SOLAR"],name:"Синтеза",circ:"Племенен",arch:"Чувствителност към нуждите",mech:"Усеща нуждите на групата и определя принципите на близостта.",ok:"Ясни договорки за взаимни нужди.",sh:"Рязко скъсване, когато нуждите не са удовлетворени."},
+ {id:"39-55",g:[39,55],c:["ROOT","SOLAR"],name:"Емоционалността",circ:"Индивидуален",arch:"Настроение и творчество",mech:"Провокира духа и носи силни промени в настроението.",ok:"Използва меланхолията като творчески източник.",sh:"Обяснява настроенията с външни причини."},
+ {id:"41-30",g:[41,30],c:["ROOT","SOLAR"],name:"Разпознаването",circ:"Колективен (Абстрактен)",arch:"Фокусирана енергия на желанието",mech:"Фантазия и желание за нов опит, които стартират цикли.",ok:"Влиза в опита без очаквания за резултата.",sh:"Разочарование, когато реалността не съвпада с мечтата."}
+];
+const CIRCUITS={"Индивидуален":"Мутация и уникалност. Влияе чрез различност; нужда от меланхолични периоди и самостоятелност.","Племенен":"Подкрепа, грижа, ресурси и лоялност към близките. Работи чрез споразумения и докосване.","Колективен (Логика)":"Модели, тестване и подобряване на бъдещето. Споделяне с другите.","Колективен (Абстрактен)":"Опит, преживявания и учене от миналото. Споделяне на уроци.","Интеграционен":"Самоопазване и лично оцеляване. Енергия, насочена към собственото поведение."};
+
+const GATE_CENTER={};CHANNELS.forEach(ch=>{GATE_CENTER[ch.g[0]]=ch.c[0];GATE_CENTER[ch.g[1]]=ch.c[1];});
+
+const TYPES={
+ "Генератор":{strat:"Да откликва",sig:"Удовлетворение",ns:"Фрустрация",aura:"Отворена и обгръщаща",txt:"Има устойчива сакрална енергия за работа и живот. Най-добре работи, когато откликва на това, което животът ѝ поднася, вместо да инициира от ума.",steps:["Задавайте си въпроси с отговор „да“ или „не“ и слушайте телесната реакция.","Не започвайте големи неща само защото „трябва“; чакайте нещо отвън да ви извика.","Фрустрацията е сигнал, че енергията е вложена в нещо, което не е ваше."]},
+ "Манифестиращ Генератор":{strat:"Да откликва, после да информира",sig:"Удовлетворение",ns:"Фрустрация и гняв",aura:"Отворена и обгръщаща",txt:"Сакрална енергия с пряк път към действие. Бърза, многозадачна, прескача стъпки. Ключът е първо отклик, после информиране на хората, които са засегнати.",steps:["Откликвайте, преди да тръгнете; след това кажете на засегнатите какво ще направите.","Позволете си да работите по няколко неща и да прескачате ненужното.","Връщайте се за пропуснатите стъпки без самообвинения."]},
+ "Прожектор":{strat:"Да чака покана",sig:"Успех",ns:"Горчивина",aura:"Фокусирана и проникваща",txt:"Вижда другите и системите в дълбочина. Няма устойчива работна енергия, затова ефективността и почивката са ключови. Влиянието работи, когато е признато и поканено.",steps:["Чакайте покана за големите неща: работа, партньорство, преместване.","Пазете силите си; не мерете продуктивността си с тази на Генераторите.","Горчивината показва, че давате насоки, без някой да ги е поискал."]},
+ "Манифестор":{strat:"Да информира, преди да действа",sig:"Мир",ns:"Гняв",aura:"Затворена и отблъскваща",txt:"Може да инициира сама и да задвижва процеси. Информирането предварително намалява съпротивата на околните и създава мир.",steps:["Преди да действате, кажете кратко на засегнатите какво предстои.","Планирайте почивка след периоди на силна инициатива.","Гневът показва, че са ви спрели или контролирали."]},
+ "Рефлектор":{strat:"Да изчака лунния цикъл (около 28 дни)",sig:"Изненада",ns:"Разочарование",aura:"Пробна и отразяваща",txt:"Няма дефинирани центрове и отразява средата. Правилната среда и хора са най-важното решение. Големите решения узряват за около месец.",steps:["Давайте си около 28 дни за големите решения.","Обсъждайте решенията с доверени хора, за да чуете себе си.","Ако средата ви натоварва, сменете я; разочарованието е сигнал за това."]}
+};
+const AUTH={
+ "Емоционален":"Яснотата идва с времето. Не решавайте на върха или на дъното на емоционалната вълна; изчакайте, докато решението спре да се променя.",
+ "Сакрален":"Телесният отклик в момента е отговорът. Звуков или телесен сигнал „да“ или „не“, преди умът да се намеси.",
+ "Далачен":"Тиха интуиция в момента, която се казва веднъж. Ако я пропуснете, рядко се връща. Доверете се на първото усещане за безопасност.",
+ "Его-манифестиран":"Решенията идват от това, което волята наистина иска. Чуйте какво казвате спонтанно, когато говорите за себе си.",
+ "Его-проектиран":"Правилното е това, което искате истински за себе си. Говорете за решението с доверени хора и чуйте собствената си воля.",
+ "Себе-проектиран":"Чуйте какво казвате, когато говорите на глас. Посоката се разпознава в собствения ви глас, не в чуждите съвети.",
+ "Ментален (околна среда)":"Решенията не идват от един център. Говорете с няколко доверени хора и обърнете внимание как се чувствате на различни места.",
+ "Лунен":"Изчакайте около 28 дни. Наблюдавайте как се променя усещането за решението в рамките на лунния цикъл."
+};
+const LINES={1:["Изследовател","Нужда от здрава основа и знание. Сигурността идва от проучване."],2:["Отшелник","Естествен талант, който се проявява, когато другите го извикат. Нужда от лично пространство."],3:["Мъченик","Учене чрез опит и грешка. Това, което не работи, също е ценно знание."],4:["Опортюнист","Възможностите идват чрез мрежата от познати и приятели."],5:["Еретик","Другите проектират очаквания върху вас. Практичните решения изграждат репутация."],6:["Ролеви модел","Три етапа в живота: опит до около 30 г., наблюдение до около 50 г., после пример за другите."]};
+const DEFS={0:["Без дефиниция","Отразява средата. Хората и мястото определят преживяването."],1:["Единична","Всички дефинирани центрове са свързани. Обработва информация самостоятелно и цялостно."],2:["Двойна (сплит)","Две отделни части. Търси хора, които „свързват“ частите. Нужда от време за обработка."],3:["Тройна","Три отделни части. Нужда от различни хора и места през деня. Решенията се нуждаят от повече време."],4:["Четворна","Четири отделни части. Рядка конфигурация. Нужда от много време и разнообразие от среди."]};
+const QUARTERS=[["Посвещението (Initiation)","Целта се открива чрез ума и прозрението."],["Цивилизацията (Civilization)","Целта се открива чрез формата и изграждането."],["Двойствеността (Duality)","Целта се открива чрез връзките и партньорството."],["Мутацията (Mutation)","Целта се открива чрез трансформацията."]];
+const VARS={
+ det:{t:"Хранене (Определяне)",src:"Слънце в Дизайна",colors:["Апетит","Вкус","Жажда","Докосване","Звук","Светлина"],L:"Активно, фокусирано: еднообразие и последователност.",R:"Пасивно, периферно: разнообразие и гъвкавост."},
+ env:{t:"Среда",src:"Северен възел в Дизайна",colors:["Пещери","Пазари","Кухни","Планини","Долини","Брегове"],L:"Активно избира конкретна среда.",R:"Приема средата, която го намери."},
+ mot:{t:"Мотивация",src:"Слънце в Личността",colors:["Страх","Надежда","Желание","Нужда","Вина","Невинност"],L:"Стратегически ум: фокус и детайл.",R:"Рецептивен ум: общата картина и периферия."},
+ per:{t:"Перспектива",src:"Северен възел в Личността",colors:["Оцеляване","Възможност","Сила","Искане","Вероятност","Личен поглед"],L:"Фокусиран поглед.",R:"Периферен поглед."}
+};
+const PLANETS=[["Sun","Слънце"],["Earth","Земя"],["NNode","Северен възел"],["SNode","Южен възел"],["Moon","Луна"],["Mercury","Меркурий"],["Venus","Венера"],["Mars","Марс"],["Jupiter","Юпитер"],["Saturn","Сатурн"],["Uranus","Уран"],["Neptune","Нептун"],["Pluto","Плутон"]];
+const SIGNS=["Овен","Телец","Близнаци","Рак","Лъв","Дева","Везни","Скорпион","Стрелец","Козирог","Водолей","Риби"];
+
+
+/* ================= ГРАДОВЕ ================= */
+const BG_TOWNS="София,Пловдив,Варна,Бургас,Русе,Стара Загора,Плевен,Сливен,Добрич,Шумен,Перник,Хасково,Ямбол,Пазарджик,Благоевград,Велико Търново,Враца,Габрово,Асеновград,Видин,Казанлък,Кюстендил,Кърджали,Монтана,Димитровград,Ловеч,Силистра,Търговище,Разград,Дупница,Горна Оряховица,Свищов,Смолян,Петрич,Сандански,Самоков,Севлиево,Лом,Карлово,Велинград,Нова Загора,Троян,Айтос,Ботевград,Гоце Делчев,Харманли,Карнобат,Свиленград,Панагюрище,Чирпан,Попово,Раднево,Козлодуй,Нови пазар,Берковица,Червен бряг,Поморие,Несебър,Средец,Каварна,Балчик,Разлог,Банско,Своге,Ихтиман,Елхово,Пещера,Етрополе,Тетевен,Луковит,Бяла Слатина,Оряхово,Мездра,Белоградчик,Кула,Елена,Дряново,Трявна,Котел,Омуртаг,Кубрат,Исперих,Тутракан,Дулово,Тервел,Генерал Тошево,Шабла,Девня,Провадия,Девин,Златоград,Мадан,Момчилград,Крумовград,Ардино,Първомай,Раковски,Стамболийски,Перущица,Хисаря,Сопот,Копривщица,Пирдоп,Златица,Сливница,Костинброд,Божурище,Елин Пелин,Брезник,Радомир,Трън,Бобов дол,Рила,Симитли,Кресна,Якоруда,Белица,Мелник,Чепеларе,Твърдица,Шипка,Мъглиж,Гълъбово,Тополовград,Ивайловград,Любимец,Созопол,Приморско,Царево,Малко Търново,Обзор,Сунгурларе,Павликени,Полски Тръмбеш,Стражица,Лясковец,Бяла,Две могили,Кнежа,Искър,Гулянци,Никопол,Белене,Левски,Долна Митрополия,Тръстеник,Вършец,Чипровци,Вълчедръм,Брусарци,Димово,Костенец,Долна баня,Сапарева баня,Кочериново,Брацигово,Ракитово,Септември,Белово,Стрелча,Брезово,Калофер,Баня,Кричим,Съединение,Лъки,Кърнаре".split(",");
+const WORLD=[["Атина, Гърция","Europe/Athens"],["Солун, Гърция","Europe/Athens"],["Истанбул, Турция","Europe/Istanbul"],["Анкара, Турция","Europe/Istanbul"],["Одрин, Турция","Europe/Istanbul"],["Букурещ, Румъния","Europe/Bucharest"],["Констанца, Румъния","Europe/Bucharest"],["Белград, Сърбия","Europe/Belgrade"],["Ниш, Сърбия","Europe/Belgrade"],["Скопие, Северна Македония","Europe/Skopje"],["Охрид, Северна Македония","Europe/Skopje"],["Тирана, Албания","Europe/Tirane"],["Подгорица, Черна гора","Europe/Podgorica"],["Сараево, Босна и Херцеговина","Europe/Sarajevo"],["Загреб, Хърватия","Europe/Zagreb"],["Любляна, Словения","Europe/Ljubljana"],["Будапеща, Унгария","Europe/Budapest"],["Виена, Австрия","Europe/Vienna"],["Прага, Чехия","Europe/Prague"],["Братислава, Словакия","Europe/Bratislava"],["Варшава, Полша","Europe/Warsaw"],["Краков, Полша","Europe/Warsaw"],["Берлин, Германия","Europe/Berlin"],["Мюнхен, Германия","Europe/Berlin"],["Франкфурт, Германия","Europe/Berlin"],["Хамбург, Германия","Europe/Berlin"],["Кьолн, Германия","Europe/Berlin"],["Щутгарт, Германия","Europe/Berlin"],["Цюрих, Швейцария","Europe/Zurich"],["Женева, Швейцария","Europe/Zurich"],["Париж, Франция","Europe/Paris"],["Лион, Франция","Europe/Paris"],["Ница, Франция","Europe/Paris"],["Брюксел, Белгия","Europe/Brussels"],["Амстердам, Нидерландия","Europe/Amsterdam"],["Люксембург","Europe/Luxembourg"],["Мадрид, Испания","Europe/Madrid"],["Барселона, Испания","Europe/Madrid"],["Валенсия, Испания","Europe/Madrid"],["Лисабон, Португалия","Europe/Lisbon"],["Рим, Италия","Europe/Rome"],["Милано, Италия","Europe/Rome"],["Венеция, Италия","Europe/Rome"],["Неапол, Италия","Europe/Rome"],["Малта","Europe/Malta"],["Лондон, Великобритания","Europe/London"],["Манчестър, Великобритания","Europe/London"],["Единбург, Великобритания","Europe/London"],["Дъблин, Ирландия","Europe/Dublin"],["Копенхаген, Дания","Europe/Copenhagen"],["Осло, Норвегия","Europe/Oslo"],["Стокхолм, Швеция","Europe/Stockholm"],["Хелзинки, Финландия","Europe/Helsinki"],["Талин, Естония","Europe/Tallinn"],["Рига, Латвия","Europe/Riga"],["Вилнюс, Литва","Europe/Vilnius"],["Киев, Украйна","Europe/Kiev"],["Одеса, Украйна","Europe/Kiev"],["Кишинев, Молдова","Europe/Chisinau"],["Минск, Беларус","Europe/Minsk"],["Москва, Русия","Europe/Moscow"],["Санкт Петербург, Русия","Europe/Moscow"],["Никозия, Кипър","Asia/Nicosia"],["Лимасол, Кипър","Asia/Nicosia"],["Тел Авив, Израел","Asia/Jerusalem"],["Дубай, ОАЕ","Asia/Dubai"],["Ню Йорк, САЩ","America/New_York"],["Вашингтон, САЩ","America/New_York"],["Бостън, САЩ","America/New_York"],["Маями, САЩ","America/New_York"],["Чикаго, САЩ","America/Chicago"],["Хюстън, САЩ","America/Chicago"],["Денвър, САЩ","America/Denver"],["Финикс, САЩ","America/Phoenix"],["Лас Вегас, САЩ","America/Los_Angeles"],["Лос Анджелис, САЩ","America/Los_Angeles"],["Сан Франциско, САЩ","America/Los_Angeles"],["Сиатъл, САЩ","America/Los_Angeles"],["Торонто, Канада","America/Toronto"],["Монреал, Канада","America/Toronto"],["Ванкувър, Канада","America/Vancouver"],["Мексико сити, Мексико","America/Mexico_City"],["Сао Пауло, Бразилия","America/Sao_Paulo"],["Буенос Айрес, Аржентина","America/Argentina/Buenos_Aires"],["Токио, Япония","Asia/Tokyo"],["Пекин, Китай","Asia/Shanghai"],["Шанхай, Китай","Asia/Shanghai"],["Хонконг","Asia/Hong_Kong"],["Сингапур","Asia/Singapore"],["Банкок, Тайланд","Asia/Bangkok"],["Делхи, Индия","Asia/Kolkata"],["Мумбай, Индия","Asia/Kolkata"],["Сидни, Австралия","Australia/Sydney"],["Мелбърн, Австралия","Australia/Melbourne"],["Кайро, Египет","Africa/Cairo"],["Йоханесбург, ЮАР","Africa/Johannesburg"],["Кейптаун, ЮАР","Africa/Johannesburg"]];
+const CITIES=[...new Set(BG_TOWNS)].map(t=>[t+", България","Europe/Sofia"]).concat(WORLD);
+const CITY_TZ=new Map(CITIES.map(([n,z])=>[n.toLowerCase(),z]));
+function findCityTz(v){v=(v||"").trim().toLowerCase();if(!v)return null;if(CITY_TZ.has(v))return CITY_TZ.get(v);const hit=CITIES.find(([n])=>n.toLowerCase().split(",")[0]===v.split(",")[0].trim());return hit?hit[1]:null;}
+function hookCity(inp,sel,hint){const run=()=>{const v=inp.value.trim();if(!v){hint.textContent="";return;}const z=findCityTz(v);if(z){fillTz(sel,z);hint.textContent=`Часовата зона е попълнена автоматично: ${z}.`;}else hint.textContent="Градът не е в списъка. Изберете часовата зона ръчно (за България: Europe/Sofia).";};inp.addEventListener("change",run);inp.addEventListener("input",()=>{if(findCityTz(inp.value)&&CITY_TZ.has(inp.value.trim().toLowerCase()))run();});return run;}
+
+/* ================= ИЗЧИСЛЕНИЯ ================= */
+const norm=x=>((x%360)+360)%360;
+const esc=s=>String(s).replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;"}[c]));
+function gateOf(lon){const o=norm(lon-302),i=Math.floor(o/5.625),w=o-i*5.625,line=Math.floor(w/0.9375)+1,wl=w-(line-1)*0.9375,color=Math.floor(wl/0.15625)+1,wc=wl-(color-1)*0.15625,tone=Math.floor(wc/(0.15625/6))+1,wt=wc-(tone-1)*(0.15625/6),base=Math.min(5,Math.floor(wt/(0.15625/30))+1);return{lon,gate:MANDALA[i],line,color,tone,base,idx:i};}
+function sunLon(t){return Astronomy.SunPosition(t).elon;}
+function nodeLon(t){const T=t.tt/36525,r=Math.PI/180,D=297.8501921+445267.1114034*T,M=357.5291092+35999.0502909*T,Mp=134.9633964+477198.8675055*T,F=93.272095+483202.0175233*T,om=125.0445479-1934.1362891*T+0.0020754*T*T;return norm(om-1.4979*Math.sin(2*(D-F)*r)-0.15*Math.sin(M*r)+0.1226*Math.sin(2*D*r)+0.1176*Math.sin(2*F*r)-0.0801*Math.sin(2*(Mp-F)*r));}
+function positions(t){const s=sunLon(t),n=nodeLon(t),o={Sun:s,Earth:norm(s+180),Moon:Astronomy.EclipticGeoMoon(t).lon,NNode:n,SNode:norm(n+180)};["Mercury","Venus","Mars","Jupiter","Saturn","Uranus","Neptune","Pluto"].forEach(b=>{o[b]=Astronomy.Ecliptic(Astronomy.GeoVector(b,t,true)).elon;});const g={};for(const k in o)g[k]=gateOf(o[k]);return g;}
+function designTime(t){const target=norm(sunLon(t)-88);let ut=t.ut-88/0.9856;for(let k=0;k<30;k++){let d=norm(sunLon(Astronomy.MakeTime(ut))-target);if(d>180)d-=360;ut-=d/0.9856;if(Math.abs(d)<1e-7)break;}return Astronomy.MakeTime(ut);}
+function tzOffsetMin(ms,tz){const p={};new Intl.DateTimeFormat("en-US",{timeZone:tz,hourCycle:"h23",year:"numeric",month:"2-digit",day:"2-digit",hour:"2-digit",minute:"2-digit",second:"2-digit"}).formatToParts(new Date(ms)).forEach(x=>p[x.type]=x.value);return (Date.UTC(+p.year,+p.month-1,+p.day,+p.hour,+p.minute,+p.second)-ms)/60000;}
+function localToUtc(dateStr,timeStr,tz){const[y,m,d]=dateStr.split("-").map(Number),[h,mi]=(timeStr||"12:00").split(":").map(Number);const wall=Date.UTC(y,m-1,d,h,mi);let utc=wall;for(let i=0;i<3;i++)utc=wall-tzOffsetMin(utc,tz)*60000;return{utc,offset:tzOffsetMin(utc,tz)};}
+const fmtOff=m=>"UTC"+(m>=0?"+":"−")+String(Math.floor(Math.abs(m)/60)).padStart(2,"0")+":"+String(Math.abs(m)%60).padStart(2,"0");
+
+/* анализ на набор активни портали */
+function analyzeGates(gates){/* gates: Set */
+ const chans=CHANNELS.filter(ch=>gates.has(ch.g[0])&&gates.has(ch.g[1]));
+ const centers=new Set();chans.forEach(ch=>ch.c.forEach(c=>centers.add(c)));
+ const adj={};Object.keys(CENTERS).forEach(c=>adj[c]=new Set());chans.forEach(ch=>{adj[ch.c[0]].add(ch.c[1]);adj[ch.c[1]].add(ch.c[0]);});
+ const reach=start=>{const s=new Set([start]),q=[start];while(q.length){const x=q.shift();adj[x].forEach(y=>{if(!s.has(y)){s.add(y);q.push(y);}});}return s;};
+ const seen=new Set();let comps=0;centers.forEach(c=>{if(!seen.has(c)){comps++;reach(c).forEach(x=>seen.add(x));}});
+ const throatR=centers.has("THROAT")?reach("THROAT"):new Set();
+ const motorThroat=MOTORS.some(m=>throatR.has(m));
+ let type;
+ if(!centers.size)type="Рефлектор";else if(centers.has("SACRAL"))type=motorThroat?"Манифестиращ Генератор":"Генератор";else type=motorThroat?"Манифестор":"Прожектор";
+ let auth;
+ if(type==="Рефлектор")auth="Лунен";
+ else if(centers.has("SOLAR"))auth="Емоционален";
+ else if(centers.has("SACRAL"))auth="Сакрален";
+ else if(centers.has("SPLEEN"))auth="Далачен";
+ else if(centers.has("HEART"))auth=reach("HEART").has("THROAT")?"Его-манифестиран":"Его-проектиран";
+ else if(centers.has("G")&&throatR.has("G"))auth="Себе-проектиран";
+ else auth="Ментален (околна среда)";
+ return{chans,centers,comps:Math.min(comps,4),type,auth};
+}
+function computeChart(inp){
+ const{utc,offset}=localToUtc(inp.date,inp.time,inp.tz);
+ const t=Astronomy.MakeTime(new Date(utc)),dt=designTime(t);
+ const P=positions(t),D=positions(dt);
+ const gmap=new Map();
+ const add=(g,k)=>{const e=gmap.get(g)||{p:false,d:false};e[k]=true;gmap.set(g,e);};
+ for(const k in P){add(P[k].gate,"p");add(D[k].gate,"d");}
+ const a=analyzeGates(new Set(gmap.keys()));
+ const pl=P.Sun.line,dl=D.Sun.line,profile=pl+"/"+dl;
+ const angle=profile==="4/1"?"Съпоставен":(pl>=5?"Левоъгълен":"Десноъгълен");
+ const q=Math.floor(((P.Sun.idx-2+64)%64)/16);
+ return Object.assign({inp,utc,offset,designUtc:dt.date.getTime(),P,D,gmap,profile,angle,quarter:q},a);
+}
+
+/* ================= СЪСТОЯНИЕ ================= */
+const STORE="larna-energiyna-karta-v1";
+const EXAMPLE={name:"Пример: Мария",date:"1986-03-14",time:"10:30",tz:"Europe/Sofia",place:"София, България"};
+const EXAMPLE_B={name:"Пример: Петър",date:"1982-09-02",time:"07:15",tz:"Europe/Sofia",place:"Пловдив, България"};
+let chart=null, selected=null;
+function loadSaved(){try{return JSON.parse(localStorage.getItem(STORE)||"[]");}catch(e){return[];}}
+function saveSaved(arr){try{localStorage.setItem(STORE,JSON.stringify(arr));return true;}catch(e){return false;}}
+
+/* ================= ПОМОЩНИ ================= */
+const $=s=>document.querySelector(s);
+function fillTz(sel,val){let zones=[];try{zones=Intl.supportedValuesOf("timeZone");}catch(e){}if(!zones.length)zones=["Europe/Sofia","Europe/London","Europe/Berlin","Europe/Athens","Europe/Moscow","America/New_York","America/Montreal","America/Los_Angeles","Asia/Tokyo","UTC"];if(!zones.includes(val))zones.unshift(val);sel.innerHTML=zones.map(z=>`<option${z===val?" selected":""}>${esc(z)}</option>`).join("");}
+const gl=a=>`${a.gate}.${a.line}`;
+const fmtDate=ms=>{const d=new Date(ms);return d.toISOString().slice(0,16).replace("T"," ")+" UTC";};
+
+/* ================= БОДИГРАФ ================= */
+const SHAPES={
+ HEAD:"180,12 210,60 150,60", AJNA:"150,90 210,90 180,140",
+ THROAT:"rect:154,166,52,52", G:"180,238 214,272 180,306 146,272",
+ HEART:"256,280 284,326 228,326", SPLEEN:"26,328 94,372 26,416",
+ SOLAR:"334,328 266,372 334,416", SACRAL:"rect:154,356,52,56", ROOT:"rect:154,444,52,52"};
+const CLABEL={HEAD:[180,44,"Глава"],AJNA:[180,116,"Ум"],THROAT:[180,195,"Гърло"],G:[180,275,"G"],HEART:[256,312,"Его"],SPLEEN:[42,375,"Далак"],SOLAR:[316,375,"Емоции"],SACRAL:[180,387,"Сакрал"],ROOT:[180,473,"Корен"]};
+const GP={64:[164,55],61:[180,55],63:[196,55],47:[164,96],24:[180,96],4:[196,96],17:[162,106],43:[180,130],11:[198,106],
+ 62:[166,172],23:[180,172],56:[194,172],16:[157,182],20:[157,200],35:[203,180],12:[203,195],45:[203,210],31:[166,214],8:[180,214],33:[194,214],
+ 7:[171,253],1:[180,246],13:[189,253],10:[153,272],25:[207,272],15:[167,287],2:[180,298],46:[193,287],
+ 21:[249,293],51:[240,309],26:[244,323],40:[268,323],
+ 48:[36,335],57:[52,345],44:[67,355],50:[83,365],32:[80,381],28:[60,394],18:[40,407],
+ 36:[324,335],22:[308,345],37:[293,355],6:[277,365],49:[280,381],55:[300,394],30:[320,407],
+ 5:[165,360],14:[180,360],29:[195,360],34:[157,372],27:[157,394],59:[203,394],42:[166,408],3:[180,408],9:[194,408],
+ 53:[166,448],60:[180,448],52:[194,448],54:[157,458],38:[157,472],58:[157,486],19:[203,458],39:[203,472],41:[203,486]};
+const WAY={"20-34":[[136,272]]};
+function shapeSvg(id,fill,stroke,sw){const d=SHAPES[id],s=`fill="${fill}" stroke="${stroke}" stroke-width="${sw}" stroke-linejoin="round"`;
+ if(d.startsWith("rect:")){const[x,y,w,h]=d.slice(5).split(",");return`<rect x="${x}" y="${y}" width="${w}" height="${h}" rx="6" ${s}/>`;}
+ return`<polygon points="${d}" ${s}/>`;}
+function drawBodygraph(svg,gmap,defCenters,opts={}){
+ const colorFor=g=>{const e=gmap.get(g);if(!e)return null;return e.p&&e.d?"var(--both)":e.p?"var(--pers)":"var(--des)";};
+ let lines="",gates="",centers="";
+ CHANNELS.forEach(ch=>{
+  const A=GP[ch.g[0]],B=GP[ch.g[1]],pts=[A,...(WAY[ch.id]||[]),B];
+  let mid;if(pts.length===2)mid=[(A[0]+B[0])/2,(A[1]+B[1])/2];else mid=pts[1];
+  const half1=[A,...(pts.length>2?[]:[]),mid],half2=[mid,B];
+  const pl=arr=>arr.map(p=>p.join(",")).join(" ");
+  const ca=colorFor(ch.g[0]),cb=colorFor(ch.g[1]),sel=selected&&selected.kind==="ch"&&selected.id===ch.id,w=sel?6:4;
+  lines+=`<g class="chline" data-ch="${ch.id}" tabindex="0" role="button" aria-label="Канал ${ch.id}">`+
+   `<polyline points="${pl(pts)}" fill="none" stroke="var(--line)" stroke-width="${w+1.5}" stroke-linecap="round" stroke-linejoin="round"/>`+
+   (ca?`<polyline points="${pl(half1)}" fill="none" stroke="${ca}" stroke-width="${w}" stroke-linecap="round"/>`:"")+
+   (cb?`<polyline points="${pl(half2)}" fill="none" stroke="${cb}" stroke-width="${w}" stroke-linecap="round"/>`:"")+
+   `<polyline points="${pl(pts)}" fill="none" stroke="transparent" stroke-width="12"/></g>`;
+ });
+ Object.keys(SHAPES).forEach(id=>{const on=defCenters.has(id),sel=selected&&selected.kind==="c"&&selected.id===id;
+  const[lx,ly,lt]=CLABEL[id],inside=true;
+  centers+=`<g class="cnode" data-c="${id}" tabindex="0" role="button" aria-label="${CENTERS[id].name}">${shapeSvg(id,on?CCOL[id]:"var(--center-off)",sel?"var(--fg)":(on?"var(--fg)":CCOL[id]),sel?2.8:1.8)}</g>`+
+   `<text x="${lx}" y="${ly}" font-size="${id==="G"?11:7.5}" text-anchor="middle" font-weight="700" class="clabel" fill="${on&&inside?"#2A1B3D":"var(--muted)"}" pointer-events="none">${lt}</text>`;});
+ Object.entries(GP).forEach(([g,[x,y]])=>{g=+g;const c=colorFor(g),on=!!c,cen=GATE_CENTER[g],def=defCenters.has(cen);
+  gates+=on?`<g pointer-events="none"><circle cx="${x}" cy="${y}" r="6.2" fill="var(--surface)" stroke="${c}" stroke-width="1.6"/><text x="${x}" y="${y+2.3}" font-size="6.4" font-weight="600" text-anchor="middle" fill="var(--fg)">${g}</text></g>`
+   :`<text x="${x}" y="${y+2.2}" font-size="5.8" text-anchor="middle" fill="${def?"#2A1B3D":"var(--muted)"}" opacity=".7" pointer-events="none">${g}</text>`;});
+ svg.innerHTML=lines+centers+gates;
+ if(opts.interactive){svg.querySelectorAll("[data-ch]").forEach(el=>{const f=()=>{selected={kind:"ch",id:el.dataset.ch};renderChart();};el.onclick=f;el.onkeydown=e=>{if(e.key==="Enter"||e.key===" "){e.preventDefault();f();}};});
+  svg.querySelectorAll("[data-c]").forEach(el=>{const f=()=>{selected={kind:"c",id:el.dataset.c};renderChart();};el.onclick=f;el.onkeydown=e=>{if(e.key==="Enter"||e.key===" "){e.preventDefault();f();}};});}
+}
+
+/* ================= РЕНДЕР: КАРТА ================= */
+function renderChart(){
+ const c=chart;if(!c)return;
+ $("#birthNote").innerHTML=`Час на раждане: ${esc(c.inp.date)} ${esc(c.inp.time)}${c.inp.place?", "+esc(c.inp.place):""}, ${esc(c.inp.tz)} (${fmtOff(c.offset)} в този ден; лятното часово време се отчита автоматично). Дизайн: ${fmtDate(c.designUtc)}.${c.inp.name.startsWith("Пример")?" <b>Това е примерна карта.</b> Въведете своите данни и натиснете „Изчисли“.":""}`;
+ const T=TYPES[c.type],D=DEFS[c.comps];
+ const AUTH_SRC={"Емоционален":"Слънчев сплит","Сакрален":"Сакрален център","Далачен":"Далачен център","Его-манифестиран":"Его център към гърлото","Его-проектиран":"Его център","Себе-проектиран":"G-център","Ментален (околна среда)":"Външна среда и разговори","Лунен":"28-дневен лунен цикъл"};
+ const tile=(k,v,sub,mono)=>`<div><span class="eyebrow">${k}</span><span class="val">${esc(v)}</span>${sub?`<span class="sub${mono?" mono":""}">${mono?sub.split(", ").map(x=>`<span class="nw">${esc(x)}</span>`).join(", "):esc(sub)}</span>`:""}</div>`;
+ $("#keyStats").innerHTML=[
+  tile("Тип",c.type,"Аура: "+T.aura.toLowerCase()),
+  tile("Стратегия",T.strat,`Подпис: ${T.sig} · Не-Аз: ${T.ns}`),
+  tile("Авторитет",c.auth,AUTH_SRC[c.auth]),
+  tile("Профил",c.profile,`${LINES[c.P.Sun.line][0]} / ${LINES[c.D.Sun.line][0]}`),
+  tile("Дефиниция",D[0],`${c.centers.size} от 9 центъра дефинирани`),
+  tile("Канали",`${c.chans.length} дефинирани`,c.chans.map(ch=>ch.id).join(", ")||"няма",1),
+  tile("Кръст",c.angle,`${gl(c.P.Sun)}/${gl(c.P.Earth)} | ${gl(c.D.Sun)}/${gl(c.D.Earth)}`,1)].join("");
+ $("#actTable").innerHTML=`<thead><tr><th>Дизайн</th><th>Планета</th><th>Личност</th></tr></thead><tbody>`+PLANETS.map(([k,n])=>`<tr><td class="d mono">${gl(c.D[k])}</td><td>${n}</td><td class="p mono">${gl(c.P[k])}</td></tr>`).join("")+"</tbody>";
+ drawBodygraph($("#bodygraph"),c.gmap,c.centers,{interactive:true});
+ renderInspector();
+}
+function gateBadge(g,e){const col=e.p&&e.d?"var(--both)":e.p?"var(--pers)":"var(--des)";return`<span class="chip"><i class="dot" style="background:${col}"></i>${g} ${esc(GATE_NAMES[g].split(" (")[0])}</span>`;}
+function renderInspector(){
+ const c=chart,el=$("#inspector");
+ if(!selected){
+  const open=Object.keys(CENTERS).filter(x=>!c.centers.has(x));
+  el.innerHTML=`<div class="eyebrow">Обзор</div><h2>${esc(c.inp.name)}</h2><p>${esc(TYPES[c.type].txt)}</p>
+  <div class="sunk"><b>Авторитет: ${esc(c.auth)}</b><p class="muted">${esc(AUTH[c.auth])}</p></div>
+  <div><div class="eyebrow">Дефинирани канали (${c.chans.length})</div><div class="row" style="margin-top:6px">${c.chans.map(ch=>`<button class="btn small" data-pick="${ch.id}" type="button">${ch.id} ${esc(ch.name)}</button>`).join("")||'<span class="muted">Няма</span>'}</div></div>
+  <div><div class="eyebrow">Отворени центрове (${open.length})</div><p class="muted">${open.map(x=>CENTERS[x].name).join(", ")||"Няма"}</p></div>
+  <p class="note">Натиснете център или канал в бодиграфа за подробности.</p>`;
+ }else if(selected.kind==="c"){
+  const C=CENTERS[selected.id],on=c.centers.has(selected.id);
+  const gs=[...c.gmap.entries()].filter(([g])=>GATE_CENTER[g]===selected.id);
+  el.innerHTML=`<div class="eyebrow">${on?"Дефиниран":"Отворен"} център · ${esc(C.type)}</div><h2>${esc(C.name)}</h2>
+  <p>${esc(on?C.defined:C.open)}</p>${on?"":`<div class="sunk"><b>Въпрос за самонаблюдение</b><p>${esc(C.q)}</p></div>`}
+  <dl class="kv"><dt>Биология</dt><dd>${esc(C.bio)}</dd></dl>
+  <div><div class="eyebrow">Активни портали в центъра</div><div class="row" style="margin-top:6px">${gs.map(([g,e])=>gateBadge(g,e)).join("")||'<span class="muted">Няма</span>'}</div></div>
+  <button class="btn small" id="insBack" type="button">Обратно към обзора</button>`;
+ }else{
+  const ch=CHANNELS.find(x=>x.id===selected.id),def=c.chans.includes(ch);
+  const st=ch.g.map(g=>c.gmap.get(g));
+  el.innerHTML=`<div class="eyebrow">${def?"Дефиниран канал":st.some(Boolean)?"Висящ портал":"Неактивен канал"} · ${esc(ch.circ)}</div><h2>${ch.id} Канал на ${esc(ch.name)}</h2>
+  <p><b>${esc(ch.arch)}.</b> ${esc(ch.mech)}</p>
+  <dl class="kv"><dt>В баланс</dt><dd>${esc(ch.ok)}</dd><dt>Сянка</dt><dd>${esc(ch.sh)}</dd><dt>Свързва</dt><dd>${CENTERS[ch.c[0]].name} и ${CENTERS[ch.c[1]].name}</dd></dl>
+  <div class="row">${ch.g.map((g,i)=>st[i]?gateBadge(g,st[i]):`<span class="chip">${g} ${esc(GATE_NAMES[g].split(" (")[0])} (неактивен)</span>`).join("")}</div>
+  <button class="btn small" id="insBack" type="button">Обратно към обзора</button>`;
+ }
+ el.querySelectorAll("[data-pick]").forEach(b=>b.onclick=()=>{selected={kind:"ch",id:b.dataset.pick};renderChart();});
+ const back=el.querySelector("#insBack");if(back)back.onclick=()=>{selected=null;renderChart();};
+}
+
+/* ================= АНАЛИЗ ================= */
+function renderReport(){
+ const c=chart,T=TYPES[c.type],open=Object.keys(CENTERS).filter(x=>!c.centers.has(x));
+ const[pl,dl]=[c.P.Sun.line,c.D.Sun.line];
+ $("#repTitle").textContent="Личен анализ: "+c.inp.name;
+ const sec=(h,b)=>`<section><h3>${h}</h3>${b}</section>`;
+ let html=sec("Накратко",`<p>${esc(c.inp.name)} е <b>${esc(c.type)}</b> с <b>${esc(c.auth.toLowerCase())}</b> авторитет и профил <b>${c.profile}</b>. Стратегията е: ${esc(T.strat.toLowerCase())}. Когато живее по нея, усещането е ${esc(T.sig.toLowerCase())}; когато не, се появява ${esc(T.ns.toLowerCase())}.</p>`);
+ html+=sec("Практически стъпки",`<ul>${T.steps.map(s=>`<li>${esc(s)}</li>`).join("")}<li>${esc(AUTH[c.auth])}</li></ul>`);
+ html+=sec("Тип и аура",`<p>${esc(T.txt)} Аурата е ${esc(T.aura.toLowerCase())}.</p>`);
+ html+=sec("Профил "+c.profile,`<p><b>Съзнателна линия ${pl}, ${LINES[pl][0]}:</b> ${esc(LINES[pl][1])}</p><p><b>Несъзнателна линия ${dl}, ${LINES[dl][0]}:</b> ${esc(LINES[dl][1])}</p><p>Траекторията е ${c.angle.toLowerCase()}: ${c.angle==="Десноъгълен"?"фокус върху личния път и опит.":c.angle==="Левоъгълен"?"животът минава през срещи и взаимодействие с другите.":"устойчив, фиксиран път, който не се отклонява лесно."}</p>`);
+ html+=sec("Дефиниция: "+DEFS[c.comps][0],`<p>${esc(DEFS[c.comps][1])}</p>`);
+ html+=sec(`Дефинирани канали (${c.chans.length})`,c.chans.length?`<ul>${c.chans.map(ch=>`<li><b>${ch.id} ${esc(ch.name)}</b> (${esc(ch.circ)}): ${esc(ch.mech)} В баланс: ${esc(ch.ok.toLowerCase())} В сянка: ${esc(ch.sh.toLowerCase())}</li>`).join("")}</ul>`:"<p>Няма дефинирани канали.</p>");
+ html+=sec(`Отворени центрове (${open.length})`,open.length?`<ul>${open.map(x=>`<li><b>${CENTERS[x].name}:</b> ${esc(CENTERS[x].open)} Въпрос: „${esc(CENTERS[x].q)}“</li>`).join("")}</ul><p class="muted">Отворените центрове са място за учене и мъдрост. Те не са недостатък.</p>`:"<p>Всички центрове са дефинирани.</p>");
+ const Q=QUARTERS[c.quarter];
+ html+=sec("Инкарнационен кръст",`<p>${c.angle} кръст ${gl(c.P.Sun)}/${gl(c.P.Earth)} | ${gl(c.D.Sun)}/${gl(c.D.Earth)}. Четвъртина на ${esc(Q[0])}: ${esc(Q[1])}</p><p>Темата на живота се носи от Слънцето в Личността, портал ${c.P.Sun.gate} ${esc(GATE_NAMES[c.P.Sun.gate])}.</p>`);
+ $("#report").innerHTML=html;
+}
+
+/* ================= КРЪСТ И СТРЕЛКИ ================= */
+function renderCross(){
+ const c=chart,Q=QUARTERS[c.quarter];
+ const row=(lbl,a)=>`<tr><td>${lbl}</td><td class="mono">${gl(a)}</td><td>${esc(GATE_NAMES[a.gate])}</td></tr>`;
+ $("#crossOut").innerHTML=`<div class="eyebrow">Инкарнационен кръст</div><h2>${c.angle} кръст</h2>
+ <p class="mono">${gl(c.P.Sun)}/${gl(c.P.Earth)} | ${gl(c.D.Sun)}/${gl(c.D.Earth)}</p>
+ <div class="scroll"><table><thead><tr><th>Позиция</th><th>Портал</th><th>Тема</th></tr></thead><tbody>${row("Слънце, Личност",c.P.Sun)}${row("Земя, Личност",c.P.Earth)}${row("Слънце, Дизайн",c.D.Sun)}${row("Земя, Дизайн",c.D.Earth)}</tbody></table></div>
+ <div class="sunk"><b>Четвъртина на ${esc(Q[0])}</b><p class="muted">${esc(Q[1])}</p></div>
+ <p class="muted">Видът на кръста следва от профила ${c.profile}: десноъгълен при 1/3 до 4/6, съпоставен при 4/1, левоъгълен при 5/1 до 6/3. Четирите позиции дават около 70% от активациите по тежест.</p>
+ <p class="note">Собствените имена на кръстовете (192 на брой) не са включени, за да няма неточни названия.</p>`;
+ const items=[["det",c.D.Sun],["env",c.D.NNode],["mot",c.P.Sun],["per",c.P.NNode]];
+ $("#varsOut").innerHTML=`<div class="eyebrow">Четирите стрелки (променливи)</div><h2>${items.map(([k,a])=>a.tone<=3?"L":"R").join("")}</h2>
+ <p class="muted">Стрелката е лява при тон 1–3 и дясна при тон 4–6.</p>
+ <div class="list">${items.map(([k,a])=>{const V=VARS[k],left=a.tone<=3;return`<div class="card"><div class="row" style="justify-content:space-between"><h3>${V.t}</h3><span class="arrow">${left?"◀ лява":"дясна ▶"}</span></div><p><b>Цвят ${a.color}: ${V.colors[a.color-1]}</b> · тон ${a.tone} · база ${a.base}</p><p class="muted">${esc(left?V.L:V.R)} Източник: ${V.src} (${gl(a)}).</p></div>`;}).join("")}</div>
+ <p class="note">Променливите изискват точен час на раждане. Грешка от няколко минути може да смени цвета или тона.</p>`;
+}
+
+/* ================= ТРАНЗИТИ ================= */
+function renderTransit(dateStr,timeStr){
+ const c=chart,tz=c.inp.tz,{utc}=localToUtc(dateStr,timeStr,tz),t=Astronomy.MakeTime(new Date(utc)),TP=positions(t);
+ $("#trTable").innerHTML=`<thead><tr><th>Планета</th><th>Портал</th><th>Тема</th><th>Във вашата карта</th></tr></thead><tbody>`+PLANETS.map(([k,n])=>{const a=TP[k],mine=c.gmap.has(a.gate);return`<tr><td>${n}</td><td class="mono">${gl(a)}</td><td>${esc(GATE_NAMES[a.gate].split(" (")[0])}</td><td>${mine?'<span class="pill-ok">да</span>':""}</td></tr>`;}).join("")+"</tbody>";
+ const tg=new Set(PLANETS.map(([k])=>TP[k].gate)),own=new Set(c.gmap.keys()),all=new Set([...own,...tg]);
+ const after=analyzeGates(all);
+ const newCh=after.chans.filter(ch=>!c.chans.includes(ch));
+ const completes=newCh.filter(ch=>ch.g.some(g=>own.has(g))),pure=newCh.filter(ch=>!ch.g.some(g=>own.has(g)));
+ const newC=[...after.centers].filter(x=>!c.centers.has(x));
+ const li=ch=>`<li><b>${ch.id} ${esc(ch.name)}</b>: ${esc(ch.mech)}</li>`;
+ $("#trImpact").innerHTML=`<div class="eyebrow">Влияние върху ${esc(c.inp.name)}</div><h2>${esc(dateStr)} ${esc(timeStr)}</h2>
+ <div class="sunk"><b>Временно дефинирани центрове (${newC.length})</b><p>${newC.map(x=>CENTERS[x].name).join(", ")||"Няма"}</p>${newC.length?'<p class="muted">В тези центрове днес усещате устойчивост, която не е постоянно ваша. Не вземайте големи решения само от нея.</p>':""}</div>
+ <div><b>Довършени ваши канали (${completes.length})</b>${completes.length?`<ul>${completes.map(li).join("")}</ul><p class="muted">Транзитът довършва ваш висящ портал. Темата на канала е по-осезаема за няколко часа или дни.</p>`:'<p class="muted">Няма.</p>'}</div>
+ <div><b>Канали изцяло от транзита (${pure.length})</b>${pure.length?`<ul>${pure.map(li).join("")}</ul><p class="muted">Общият фон на деня за всички хора.</p>`:'<p class="muted">Няма.</p>'}</div>
+ <p class="muted">Типът за деня по транзит: ${esc(after.type)} (вашият е ${esc(c.type)}). Стратегията и авторитетът ви не се променят от транзитите.</p>`;
+}
+
+/* ================= СИНАСТРИЯ ================= */
+const FORM={9:"Без лично пространство. Силно привличане и интензивност; нужда от време поотделно.",8:"Много близка връзка, по-скоро като общ свят. Единият отворен център е мястото, където навлиза външният свят.",7:"Класическа формула на привличане и интерес. Двата отворени центъра дават място за движение.",6:"Повече лично пространство. Връзката е по-рядко „задушаваща“ и разчита на общи интереси."};
+function renderSynastry(b){
+ const a=chart;const A=a.gmap,B=b.gmap,union=new Set([...A.keys(),...B.keys()]),comp=analyzeGates(union);
+ const n=comp.centers.size;
+ const groups={"Електромагнит":[],"Компромис":[],"Доминация":[],"Другарство":[]};
+ CHANNELS.forEach(ch=>{const[g1,g2]=ch.g,A1=A.has(g1),A2=A.has(g2),B1=B.has(g1),B2=B.has(g2),Af=A1&&A2,Bf=B1&&B2;
+  if(Af&&Bf)groups["Другарство"].push([ch,""]);
+  else if(Af&&(B1||B2))groups["Компромис"].push([ch,a.inp.name]);
+  else if(Bf&&(A1||A2))groups["Компромис"].push([ch,b.inp.name]);
+  else if(Af)groups["Доминация"].push([ch,a.inp.name]);
+  else if(Bf)groups["Доминация"].push([ch,b.inp.name]);
+  else if((A1&&B2)||(A2&&B1))groups["Електромагнит"].push([ch,""]);});
+ const desc={"Електромагнит":"Всеки има по един портал от канала. Привличане и искра, но и триене.","Компромис":"Единият има целия канал, другият само единия портал. Вторият се приспособява към първия.","Доминация":"Единият има канала, другият няма нито един от двата портала. Вторият се учи от първия.","Другарство":"И двамата имат канала. Споделено разбиране без триене."};
+ const svg=`<svg class="bg-svg" viewBox="0 0 360 520" id="synSvg"></svg>`;
+ $("#synOut").innerHTML=`<div class="panel"><div class="eyebrow">Композитна карта</div><h2>${esc(a.inp.name)} + ${esc(b.inp.name)}</h2>
+ <div class="keys k3"><div><span class="eyebrow">Формула</span><span class="val">${n}-${9-n}</span><span class="sub">${n} общо дефинирани центъра</span></div><div><span class="eyebrow">Тип на връзката</span><span class="val">${esc(comp.type)}</span><span class="sub">Енергията на двойката</span></div><div><span class="eyebrow">${esc(b.inp.name)}</span><span class="val">${esc(b.type)}</span><span class="sub">Профил ${b.profile} · ${esc(b.auth)} авторитет</span></div></div>
+ <p>${esc(FORM[n]||"По-малко общо дефинирани центрове. Връзката разчита повече на средата и на споделени дейности.")}</p>${svg}
+ <div class="legend"><span><i style="background:var(--pers)"></i>${esc(a.inp.name)}</span><span><i style="background:var(--des)"></i>${esc(b.inp.name)}</span><span><i style="background:var(--both)"></i>И двамата</span></div></div>
+ <div class="panel"><div class="eyebrow">Видове връзки по канали</div>${Object.entries(groups).map(([k,l])=>`<div class="card"><div class="row" style="justify-content:space-between"><h3>${k}</h3><span class="tag">${l.length}</span></div><p class="muted">${desc[k]}</p>${l.length?`<ul style="margin:0;padding-left:18px">${l.map(([ch,who])=>`<li>${ch.id} ${esc(ch.name)}${who?` (${esc(who)})`:""}</li>`).join("")}</ul>`:""}</div>`).join("")}</div>`;
+ const m=new Map();union.forEach(g=>m.set(g,{p:A.has(g),d:B.has(g)}));
+ drawBodygraph($("#synSvg"),m,comp.centers);
+}
+
+/* ================= СПРАВОЧНИК ================= */
+let refMode="channels";
+function renderRef(){
+ const q=$("#refSearch").value.trim().toLowerCase(),circ=$("#refCircuit").value;
+ $("#refCircuit").hidden=refMode!=="channels";
+ document.querySelectorAll("[data-ref]").forEach(b=>b.classList.toggle("primary",b.dataset.ref===refMode));
+ const mine=g=>chart&&chart.gmap.has(g);
+ let out="";
+ if(refMode==="channels"){
+  out=CHANNELS.filter(ch=>(circ==="ALL"||ch.circ===circ)&&(!q||(ch.id+" "+ch.name+" "+ch.arch).toLowerCase().includes(q))).map(ch=>{const own=chart&&chart.chans.includes(ch);return`<div class="card"><div class="row" style="justify-content:space-between"><h3>${ch.id} ${esc(ch.name)}</h3>${own?'<span class="tag">във вашата карта</span>':""}</div><p class="muted">${esc(ch.circ)} · ${CENTERS[ch.c[0]].short} – ${CENTERS[ch.c[1]].short}</p><p><b>${esc(ch.arch)}.</b> ${esc(ch.mech)}</p><dl class="kv"><dt>Баланс</dt><dd>${esc(ch.ok)}</dd><dt>Сянка</dt><dd>${esc(ch.sh)}</dd></dl></div>`;}).join("");
+  if(circ!=="ALL")out=`<div class="card"><h3>${esc(circ)}</h3><p>${esc(CIRCUITS[circ])}</p></div>`+out;
+ }else if(refMode==="centers"){
+  out=Object.entries(CENTERS).filter(([k,C])=>!q||C.name.toLowerCase().includes(q)).map(([k,C])=>`<div class="card"><div class="row" style="justify-content:space-between"><h3>${C.name}</h3>${chart&&chart.centers.has(k)?'<span class="tag">дефиниран</span>':""}</div><p class="muted">${esc(C.type)} · ${esc(C.bio)}</p><dl class="kv"><dt>Дефиниран</dt><dd>${esc(C.defined)}</dd><dt>Отворен</dt><dd>${esc(C.open)}</dd><dt>Въпрос</dt><dd>${esc(C.q)}</dd></dl></div>`).join("");
+ }else if(refMode==="gates"){
+  out=MANDALA.slice().sort((a,b)=>a-b).filter(g=>!q||String(g)===q||GATE_NAMES[g].toLowerCase().includes(q)).map(g=>{const chs=CHANNELS.filter(ch=>ch.g.includes(g));const i=MANDALA.indexOf(g),start=norm(302+i*5.625),s=Math.floor(start/30),d=start-s*30;return`<div class="card"><div class="row" style="justify-content:space-between"><h3>${g} ${esc(GATE_NAMES[g])}</h3>${mine(g)?'<span class="tag">активен</span>':""}</div><p class="muted">${CENTERS[GATE_CENTER[g]].name} · от ${Math.floor(d)}°${String(Math.round((d%1)*60)).padStart(2,"0")}′ ${SIGNS[s]}</p><p>Канали: ${chs.map(ch=>`${ch.id} ${esc(ch.name)}`).join(", ")}</p></div>`;}).join("");
+ }else{
+  out=Object.entries(TYPES).map(([k,T])=>`<div class="card"><div class="row" style="justify-content:space-between"><h3>${k}</h3>${chart&&chart.type===k?'<span class="tag">вашият тип</span>':""}</div><dl class="kv"><dt>Стратегия</dt><dd>${esc(T.strat)}</dd><dt>Подпис</dt><dd>${esc(T.sig)}</dd><dt>Не-Аз</dt><dd>${esc(T.ns)}</dd><dt>Аура</dt><dd>${esc(T.aura)}</dd></dl><p>${esc(T.txt)}</p></div>`).join("")+Object.entries(AUTH).map(([k,v])=>`<div class="card"><h3>Авторитет: ${k}</h3><p>${esc(v)}</p></div>`).join("")+Object.entries(LINES).map(([k,v])=>`<div class="card"><h3>Линия ${k}: ${v[0]}</h3><p>${esc(v[1])}</p></div>`).join("");
+ }
+ $("#refOut").innerHTML=out||'<p class="muted">Не намирам информация по това търсене.</p>';
+}
+
+/* ================= КАЛКУЛАТОР ================= */
+function renderAstro(){
+ const lon=(+$("#aSign").value)*30+(+$("#aDeg").value||0)+(+$("#aMin").value||0)/60+(+$("#aSec").value||0)/3600;
+ const a=gateOf(lon),e=gateOf(lon+180);
+ $("#astroOut").innerHTML=`<p class="mono">Еклиптична дължина: ${lon.toFixed(4)}°</p><h2>Портал ${a.gate}.${a.line} · цвят ${a.color} · тон ${a.tone} · база ${a.base}</h2><p>${esc(GATE_NAMES[a.gate])} · ${CENTERS[GATE_CENTER[a.gate]].name}</p><p class="muted">Противоположна точка (Земя): портал ${gl(e)}, ${esc(GATE_NAMES[e.gate])}.</p>`;
+}
+
+/* ================= СВЪРЗВАНЕ ================= */
+function readBirth(){return{name:$("#bName").value.trim()||"Без име",date:$("#bDate").value,time:$("#bTime").value||"12:00",tz:$("#bTz").value,place:$("#bPlace").value.trim()};}
+function setBirth(p){$("#bName").value=p.name;$("#bDate").value=p.date;$("#bTime").value=p.time;fillTz($("#bTz"),p.tz);$("#bPlace").value=p.place||"";}
+function runChart(p){chart=computeChart(p);selected=null;renderChart();renderReport();renderCross();renderRef();const n=new Date();if(!$("#trDate").value){$("#trDate").value=n.toISOString().slice(0,10);$("#trTime").value=n.toTimeString().slice(0,5);}renderTransit($("#trDate").value,$("#trTime").value);}
+function refreshSaved(){const s=loadSaved();const opts=s.map((p,i)=>`<option value="${i}">${esc(p.name)} · ${esc(p.date)}</option>`).join("");$("#savedSel").innerHTML=`<option value="">— изберете —</option>`+opts;$("#synSaved").innerHTML=`<option value="">— или въведете —</option>`+opts;}
+function showTab(id){document.querySelectorAll("[role=tab]").forEach(b=>b.setAttribute("aria-selected",b.dataset.tab===id));document.querySelectorAll("[role=tabpanel]").forEach(p=>p.hidden=p.id!=="tab-"+id);}
+
+function init(){
+ if(typeof Astronomy==="undefined"){$("#libErr").hidden=false;return;}
+ document.querySelectorAll("[role=tab]").forEach(b=>b.onclick=()=>{showTab(b.dataset.tab);try{history.replaceState(null,"","#"+b.dataset.tab);}catch(e){}});
+ const h=(location.hash||"").slice(1);if(document.getElementById("tab-"+h))showTab(h);
+ $("#aSign").innerHTML=SIGNS.map((s,i)=>`<option value="${i}"${i===7?" selected":""}>${s}</option>`).join("");
+ Object.keys(CIRCUITS).forEach(k=>{const n=CHANNELS.filter(c=>c.circ===k).length;$("#refCircuit").insertAdjacentHTML("beforeend",`<option value="${esc(k)}">${esc(k)} (${n})</option>`);});
+ $("#cityList").innerHTML=CITIES.map(([n])=>`<option value="${esc(n)}"></option>`).join("");
+ hookCity($("#bPlace"),$("#bTz"),$("#bCityHint"));hookCity($("#sPlace"),$("#sTz"),$("#sCityHint"));
+ setBirth(EXAMPLE);fillTz($("#sTz"),"Europe/Sofia");$("#sPlace").value=EXAMPLE_B.place;
+ $("#sName").value=EXAMPLE_B.name;$("#sDate").value=EXAMPLE_B.date;$("#sTime").value=EXAMPLE_B.time;
+ refreshSaved();
+ $("#birthForm").onsubmit=e=>{e.preventDefault();runChart(readBirth());};
+ $("#btnSave").onclick=()=>{const p=readBirth();if(!p.date)return;const s=loadSaved().filter(x=>x.name!==p.name);s.push(p);const ok=saveSaved(s);refreshSaved();$("#birthNote").textContent=ok?`Картата „${p.name}“ е запазена в този браузър.`:"Браузърът не позволява запазване. Данните не са запазени.";runChart(p);};
+ $("#savedSel").onchange=e=>{const p=loadSaved()[e.target.value];if(p){setBirth(p);runChart(p);}};
+ let delArm=false;$("#btnDelete").onclick=()=>{const i=$("#savedSel").value;if(i===""){$("#birthNote").textContent="Изберете запазена карта, която да изтриете.";return;}if(!delArm){delArm=true;$("#btnDelete").textContent="Потвърди";$("#btnDelete").classList.add("danger");setTimeout(()=>{delArm=false;$("#btnDelete").textContent="Изтрий";$("#btnDelete").classList.remove("danger");},4000);return;}const s=loadSaved();const[r]=s.splice(+i,1);saveSaved(s);refreshSaved();delArm=false;$("#btnDelete").textContent="Изтрий";$("#btnDelete").classList.remove("danger");$("#birthNote").textContent=`Картата „${r.name}“ е изтрита.`;};
+ $("#trForm").onsubmit=e=>{e.preventDefault();renderTransit($("#trDate").value,$("#trTime").value||"12:00");};
+ $("#trNow").onclick=()=>{const n=new Date(),p={};new Intl.DateTimeFormat("en-CA",{timeZone:chart.inp.tz,hourCycle:"h23",year:"numeric",month:"2-digit",day:"2-digit",hour:"2-digit",minute:"2-digit"}).formatToParts(n).forEach(x=>p[x.type]=x.value);$("#trDate").value=`${p.year}-${p.month}-${p.day}`;$("#trTime").value=`${p.hour}:${p.minute}`;renderTransit($("#trDate").value,$("#trTime").value);};
+ $("#synSaved").onchange=e=>{const p=loadSaved()[e.target.value];if(p){$("#sName").value=p.name;$("#sDate").value=p.date;$("#sTime").value=p.time;$("#sPlace").value=p.place||"";fillTz($("#sTz"),p.tz);}};
+ $("#synForm").onsubmit=e=>{e.preventDefault();renderSynastry(computeChart({name:$("#sName").value.trim()||"Човек Б",date:$("#sDate").value,time:$("#sTime").value||"12:00",tz:$("#sTz").value}));};
+ document.querySelectorAll("[data-ref]").forEach(b=>b.onclick=()=>{refMode=b.dataset.ref;renderRef();});
+ $("#refSearch").oninput=renderRef;$("#refCircuit").onchange=renderRef;
+ ["#aSign","#aDeg","#aMin","#aSec"].forEach(s=>$(s).oninput=renderAstro);renderAstro();
+ $("#btnCopy").onclick=()=>{const txt=$("#repTitle").textContent+"\n\n"+$("#report").innerText;const done=()=>{$("#btnCopy").textContent="Копирано";setTimeout(()=>$("#btnCopy").textContent="Копирай текста",2000);};
+  try{navigator.clipboard.writeText(txt).then(done,()=>{const r=document.createRange();r.selectNodeContents($("#report"));const s=getSelection();s.removeAllRanges();s.addRange(r);$("#btnCopy").textContent="Текстът е маркиран, натиснете Ctrl+C";});}catch(e){}};
+ runChart(EXAMPLE);
+ renderSynastry(computeChart({name:EXAMPLE_B.name,date:EXAMPLE_B.date,time:EXAMPLE_B.time,tz:EXAMPLE_B.tz}));
+}
+init();
+</script>
+
+</body>
+</html>
