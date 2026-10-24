@@ -117,6 +117,9 @@ svg text{font-family:var(--f-mono)}
 .note{font-size:.82rem;color:var(--muted);border-left:3px solid var(--accent);padding-left:10px}
 .warn{color:var(--des)}
 .cards-2{display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:12px}
+.syn-list{display:grid;gap:10px}
+.syn-item{display:grid;gap:4px;padding-top:10px;border-top:1px solid var(--line)}
+.syn-item:first-child{border-top:0;padding-top:2px}
 .pill-ok{color:var(--ok);font-weight:700}
 [role="tabpanel"]{display:grid;gap:20px}
 .arrow{font-family:var(--f-mono);font-weight:700;color:var(--accent-3)}
@@ -590,21 +593,30 @@ const FORM={9:"Без лично пространство. Силно привл
 function renderSynastry(b){
  const a=chart;const A=a.gmap,B=b.gmap,union=new Set([...A.keys(),...B.keys()]),comp=analyzeGates(union);
  const n=comp.centers.size;
- const groups={"Електромагнит":[],"Компромис":[],"Доминация":[],"Другарство":[]};
+ const X=a.inp.name,Y=b.inp.name;
+ const groups={em:[],comp:[],dom:[],same:[]};
  CHANNELS.forEach(ch=>{const[g1,g2]=ch.g,A1=A.has(g1),A2=A.has(g2),B1=B.has(g1),B2=B.has(g2),Af=A1&&A2,Bf=B1&&B2;
-  if(Af&&Bf)groups["Другарство"].push([ch,""]);
-  else if(Af&&(B1||B2))groups["Компромис"].push([ch,a.inp.name]);
-  else if(Bf&&(A1||A2))groups["Компромис"].push([ch,b.inp.name]);
-  else if(Af)groups["Доминация"].push([ch,a.inp.name]);
-  else if(Bf)groups["Доминация"].push([ch,b.inp.name]);
-  else if((A1&&B2)||(A2&&B1))groups["Електромагнит"].push([ch,""]);});
- const desc={"Електромагнит":"Всеки има по един портал от канала. Привличане и искра, но и триене.","Компромис":"Единият има целия канал, другият само единия портал. Вторият се приспособява към първия.","Доминация":"Единият има канала, другият няма нито един от двата портала. Вторият се учи от първия.","Другарство":"И двамата имат канала. Споделено разбиране без триене."};
+  const th=`<b>${ch.id} ${esc(ch.name)}</b> <span class="muted">· ${esc(ch.arch.toLowerCase())}</span>`;
+  if(Af&&Bf)groups.same.push(`${th}<p>И ${esc(X)}, и ${esc(Y)} имат целия канал. По тази тема сте еднакви: разбирате се без обяснения и никой не променя другия.</p>`);
+  else if((Af&&(B1||B2))||(Bf&&(A1||A2))){const F=Af?X:Y,P=Af?Y:X,g=Af?(B1?g1:g2):(A1?g1:g2);
+   groups.comp.push(`${th}<p>${esc(F)} има целия канал, а ${esc(P)} има само портал ${g} от него. ${esc(F)} е постоянният източник на тази енергия и обикновено води, а ${esc(P)} се нагажда към начина на ${esc(F)}. Полезно е ${esc(P)} да казва открито, когато нещо не е удобно.</p>`);}
+  else if(Af||Bf){const F=Af?X:Y,P=Af?Y:X;
+   groups.dom.push(`${th}<p>${esc(F)} има целия канал, а ${esc(P)} няма нито един от двата му портала. По тази тема води ${esc(F)}, а ${esc(P)} я преживява и учи чрез ${esc(F)}. Важно е ${esc(F)} да не налага, а ${esc(P)} да не губи собствения си ритъм.</p>`);}
+  else if((A1&&B2)||(A2&&B1)){const gx=A1?g1:g2,gy=A1?g2:g1;
+   groups.em.push(`${th}<p>${esc(X)} има портал ${gx}, а ${esc(Y)} има портал ${gy}. Поотделно никой няма този канал, но заедно го „включвате“. Затова темата оживява само когато сте заедно: тя ви привлича, но може да носи и търкания.</p>`);}
+ });
+ const GT={em:["Привличане","електромагнит",`Всеки от вас носи половината от канала. Заедно го завършвате.`],
+  comp:["Единият води, другият се нагажда","компромис",`Единият има целия канал, другият само половината.`],
+  dom:["Единият учи другия","доминация",`Единият има целия канал, другият нищо от него.`],
+  same:["Еднакви","другарство",`И двамата имате целия канал.`]};
  const svg=`<svg class="bg-svg" viewBox="0 0 360 520" id="synSvg"></svg>`;
- $("#synOut").innerHTML=`<div class="panel"><div class="eyebrow">Композитна карта</div><h2>${esc(a.inp.name)} + ${esc(b.inp.name)}</h2>
- <div class="keys k3"><div><span class="eyebrow">Формула</span><span class="val">${n}-${9-n}</span><span class="sub">${n} общо дефинирани центъра</span></div><div><span class="eyebrow">Тип на връзката</span><span class="val">${esc(comp.type)}</span><span class="sub">Енергията на двойката</span></div><div><span class="eyebrow">${esc(b.inp.name)}</span><span class="val">${esc(b.type)}</span><span class="sub">Профил ${b.profile} · ${esc(b.auth)} авторитет</span></div></div>
+ $("#synOut").innerHTML=`<div class="panel"><div class="eyebrow">Композитна карта</div><h2>${esc(X)} + ${esc(Y)}</h2>
+ <div class="keys k3"><div><span class="eyebrow">Формула</span><span class="val">${n}-${9-n}</span><span class="sub">Заедно ${esc(X)} и ${esc(Y)} имат ${n} от 9 центъра дефинирани</span></div><div><span class="eyebrow">Заедно действате като</span><span class="val">${esc(comp.type)}</span><span class="sub">Енергията на двойката, не на всеки поотделно</span></div><div><span class="eyebrow">${esc(Y)}</span><span class="val">${esc(b.type)}</span><span class="sub">Профил ${b.profile} · ${esc(b.auth)} авторитет</span></div></div>
  <p>${esc(FORM[n]||"По-малко общо дефинирани центрове. Връзката разчита повече на средата и на споделени дейности.")}</p>${svg}
- <div class="legend"><span><i style="background:var(--pers)"></i>${esc(a.inp.name)}</span><span><i style="background:var(--des)"></i>${esc(b.inp.name)}</span><span><i style="background:var(--both)"></i>И двамата</span></div></div>
- <div class="panel"><div class="eyebrow">Видове връзки по канали</div>${Object.entries(groups).map(([k,l])=>`<div class="card"><div class="row" style="justify-content:space-between"><h3>${k}</h3><span class="tag">${l.length}</span></div><p class="muted">${desc[k]}</p>${l.length?`<ul style="margin:0;padding-left:18px">${l.map(([ch,who])=>`<li>${ch.id} ${esc(ch.name)}${who?` (${esc(who)})`:""}</li>`).join("")}</ul>`:""}</div>`).join("")}</div>`;
+ <div class="legend"><span><i style="background:var(--pers)"></i>${esc(X)}</span><span><i style="background:var(--des)"></i>${esc(Y)}</span><span><i style="background:var(--both)"></i>И двамата</span></div></div>
+ <div class="panel"><div class="eyebrow">Как си влияете</div>
+ <p class="muted">Всеки канал е тема в живота, например общуване, грижа, амбиция или ритъм. Тук виждате как всяка тема се проявява между ${esc(X)} и ${esc(Y)}.</p>
+ ${Object.entries(GT).map(([k,[t,term,intro]])=>`<div class="card"><div class="row" style="justify-content:space-between"><h3>${t}</h3><span class="tag">${groups[k].length}</span></div><p class="muted">${intro} <span style="opacity:.75">(${term})</span></p>${groups[k].length?`<div class="syn-list">${groups[k].map(x=>`<div class="syn-item">${x}</div>`).join("")}</div>`:`<p class="muted">Няма такива канали.</p>`}</div>`).join("")}</div>`;
  const m=new Map();union.forEach(g=>m.set(g,{p:A.has(g),d:B.has(g)}));
  drawBodygraph($("#synSvg"),m,comp.centers);
 }
